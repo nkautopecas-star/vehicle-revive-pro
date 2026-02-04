@@ -38,6 +38,7 @@ import {
   useMarketplaceListings,
   useMarketplaceAccounts,
   useLinkListingToPart,
+  useMarketplaceListingStats,
   MarketplaceListing,
 } from "@/hooks/useMarketplaceListings";
 import { LinkPartDialog } from "@/components/anuncios/LinkPartDialog";
@@ -63,6 +64,9 @@ export default function Anuncios() {
     page: currentPage,
     pageSize,
   });
+  const { data: stats } = useMarketplaceListingStats(
+    accountFilter !== "all" ? accountFilter : undefined
+  );
   const linkMutation = useLinkListingToPart();
 
   const listings = paginatedResult?.data || [];
@@ -116,13 +120,6 @@ export default function Anuncios() {
     }).format(price);
   };
 
-  const stats = {
-    total: paginatedResult?.totalCount || 0,
-    active: listings.filter((l) => l.status === "active").length,
-    paused: listings.filter((l) => l.status === "paused").length,
-    linked: listings.filter((l) => l.part_id !== null).length,
-  };
-
   return (
     <AppLayout title="Anúncios">
       <div className="space-y-6">
@@ -145,14 +142,14 @@ export default function Anuncios() {
         </div>
 
         {/* Stats Cards */}
-        <div className="grid gap-4 md:grid-cols-4">
+        <div className="grid gap-4 md:grid-cols-5">
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-sm font-medium">Total de Anúncios</CardTitle>
               <ShoppingBag className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">{stats.total}</div>
+              <div className="text-2xl font-bold">{stats?.total || 0}</div>
             </CardContent>
           </Card>
           <Card>
@@ -161,7 +158,7 @@ export default function Anuncios() {
               <div className="h-2 w-2 rounded-full bg-success" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold text-success">{stats.active}</div>
+              <div className="text-2xl font-bold text-success">{stats?.active || 0}</div>
             </CardContent>
           </Card>
           <Card>
@@ -170,7 +167,16 @@ export default function Anuncios() {
               <div className="h-2 w-2 rounded-full bg-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">{stats.paused}</div>
+              <div className="text-2xl font-bold">{stats?.paused || 0}</div>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">Vendidos</CardTitle>
+              <div className="h-2 w-2 rounded-full bg-primary" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold text-primary">{stats?.sold || 0}</div>
             </CardContent>
           </Card>
           <Card>
@@ -179,7 +185,7 @@ export default function Anuncios() {
               <Package className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">{stats.linked}</div>
+              <div className="text-2xl font-bold">{stats?.linked || 0}</div>
             </CardContent>
           </Card>
         </div>
