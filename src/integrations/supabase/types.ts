@@ -78,7 +78,7 @@ export type Database = {
           id: string
           last_sync: string | null
           marketplace_account_id: string
-          part_id: string
+          part_id: string | null
           preco: number
           status: Database["public"]["Enums"]["listing_status"]
           titulo: string
@@ -90,7 +90,7 @@ export type Database = {
           id?: string
           last_sync?: string | null
           marketplace_account_id: string
-          part_id: string
+          part_id?: string | null
           preco: number
           status?: Database["public"]["Enums"]["listing_status"]
           titulo: string
@@ -102,7 +102,7 @@ export type Database = {
           id?: string
           last_sync?: string | null
           marketplace_account_id?: string
-          part_id?: string
+          part_id?: string | null
           preco?: number
           status?: Database["public"]["Enums"]["listing_status"]
           titulo?: string
