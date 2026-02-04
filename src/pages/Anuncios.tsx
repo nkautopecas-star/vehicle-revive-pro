@@ -26,6 +26,11 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import {
+  HoverCard,
+  HoverCardContent,
+  HoverCardTrigger,
+} from "@/components/ui/hover-card";
+import {
   Search,
   ExternalLink,
   Package,
@@ -283,19 +288,34 @@ export default function Anuncios() {
                   listings.map((listing) => (
                     <TableRow key={listing.id}>
                       <TableCell>
-                        <div className="w-10 h-10 rounded overflow-hidden bg-muted flex items-center justify-center">
-                          {listing.image_url ? (
-                            <AspectRatio ratio={1}>
-                              <img
-                                src={listing.image_url}
-                                alt={listing.titulo}
-                                className="w-full h-full object-cover"
-                              />
-                            </AspectRatio>
-                          ) : (
+                        {listing.image_url ? (
+                          <HoverCard openDelay={200} closeDelay={100}>
+                            <HoverCardTrigger asChild>
+                              <div className="w-10 h-10 rounded overflow-hidden bg-muted flex items-center justify-center cursor-pointer">
+                                <AspectRatio ratio={1}>
+                                  <img
+                                    src={listing.image_url}
+                                    alt={listing.titulo}
+                                    className="w-full h-full object-cover"
+                                  />
+                                </AspectRatio>
+                              </div>
+                            </HoverCardTrigger>
+                            <HoverCardContent side="right" className="w-64 p-2">
+                              <AspectRatio ratio={1}>
+                                <img
+                                  src={listing.image_url}
+                                  alt={listing.titulo}
+                                  className="w-full h-full object-cover rounded"
+                                />
+                              </AspectRatio>
+                            </HoverCardContent>
+                          </HoverCard>
+                        ) : (
+                          <div className="w-10 h-10 rounded overflow-hidden bg-muted flex items-center justify-center">
                             <ImageIcon className="h-4 w-4 text-muted-foreground" />
-                          )}
-                        </div>
+                          </div>
+                        )}
                       </TableCell>
                       <TableCell>
                         <div className="flex flex-col">
