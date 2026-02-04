@@ -5,11 +5,13 @@ import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { cn } from "@/lib/utils";
-import { Send, Sparkles, Package, MessageSquare, ExternalLink } from "lucide-react";
+import { Send, Sparkles, Package, MessageSquare, ExternalLink, Loader2, Check } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import type { MarketplaceQuestion } from "@/hooks/useMarketplaceQuestions";
 import { useAnswerQuestion } from "@/hooks/useMarketplaceQuestions";
+import { supabase } from "@/integrations/supabase/client";
+import { toast } from "sonner";
 
 const marketplaceConfig = {
   mercadolivre: { label: "Mercado Livre", color: "bg-yellow-500/20 text-yellow-500" },
@@ -23,7 +25,46 @@ interface QuestionDetailProps {
 
 export function QuestionDetail({ question }: QuestionDetailProps) {
   const [answer, setAnswer] = useState("");
+  const [aiSuggestion, setAiSuggestion] = useState<string | null>(null);
+  const [isLoadingSuggestion, setIsLoadingSuggestion] = useState(false);
   const answerMutation = useAnswerQuestion();
+
+  const handleGenerateSuggestion = async () => {
+    if (!question) return;
+
+    setIsLoadingSuggestion(true);
+    setAiSuggestion(null);
+
+    try {
+      const { data, error } = await supabase.functions.invoke("suggest-answer", {
+        body: {
+          question: question.question,
+          productTitle: question.listing?.titulo,
+          productPrice: question.listing?.preco,
+        },
+      });
+
+      if (error) throw error;
+
+      if (data.suggestion) {
+        setAiSuggestion(data.suggestion);
+      } else if (data.error) {
+        toast.error(data.error);
+      }
+    } catch (error) {
+      console.error("Error generating suggestion:", error);
+      toast.error("Erro ao gerar sugestão. Tente novamente.");
+    } finally {
+      setIsLoadingSuggestion(false);
+    }
+  };
+
+  const handleUseSuggestion = () => {
+    if (aiSuggestion) {
+      setAnswer(aiSuggestion);
+      setAiSuggestion(null);
+    }
+  };
 
   const handleSubmit = () => {
     if (!question || !answer.trim()) return;
@@ -165,17 +206,59 @@ export function QuestionDetail({ question }: QuestionDetailProps) {
             <div className="p-4 rounded-xl bg-primary/5 border border-primary/20">
               <div className="flex items-start gap-3">
                 <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-primary/10">
-                  <Sparkles className="w-4 h-4 text-primary" />
+                  {isLoadingSuggestion ? (
+                    <Loader2 className="w-4 h-4 text-primary animate-spin" />
+                  ) : (
+                    <Sparkles className="w-4 h-4 text-primary" />
+                  )}
                 </div>
                 <div className="flex-1">
-                  <div className="flex items-center gap-2 mb-2">
+                  <div className="flex items-center justify-between gap-2 mb-2">
                     <span className="text-sm font-medium text-primary">Sugestão IA</span>
-                    <Badge variant="outline" className="text-xs">Em breve</Badge>
+                    {!aiSuggestion && !isLoadingSuggestion && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="h-7 text-xs gap-1"
+                        onClick={handleGenerateSuggestion}
+                      >
+                        <Sparkles className="w-3 h-3" />
+                        Gerar sugestão
+                      </Button>
+                    )}
                   </div>
-                  <p className="text-sm text-muted-foreground">
-                    A sugestão automática de respostas será disponibilizada em breve.
-                    Por enquanto, escreva sua resposta manualmente.
-                  </p>
+                  {isLoadingSuggestion ? (
+                    <p className="text-sm text-muted-foreground">
+                      Gerando sugestão de resposta...
+                    </p>
+                  ) : aiSuggestion ? (
+                    <div className="space-y-3">
+                      <p className="text-sm">{aiSuggestion}</p>
+                      <div className="flex gap-2">
+                        <Button
+                          size="sm"
+                          className="h-7 text-xs gap-1"
+                          onClick={handleUseSuggestion}
+                        >
+                          <Check className="w-3 h-3" />
+                          Usar sugestão
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="h-7 text-xs gap-1"
+                          onClick={handleGenerateSuggestion}
+                        >
+                          <Sparkles className="w-3 h-3" />
+                          Nova sugestão
+                        </Button>
+                      </div>
+                    </div>
+                  ) : (
+                    <p className="text-sm text-muted-foreground">
+                      Clique em "Gerar sugestão" para receber uma resposta sugerida por IA.
+                    </p>
+                  )}
                 </div>
               </div>
             </div>
