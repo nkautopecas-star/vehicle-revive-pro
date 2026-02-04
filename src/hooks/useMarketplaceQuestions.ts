@@ -1,4 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 
@@ -45,6 +46,39 @@ interface UseMarketplaceQuestionsOptions {
 
 export function useMarketplaceQuestions(options: UseMarketplaceQuestionsOptions = {}) {
   const { status, search, accountId } = options;
+  const queryClient = useQueryClient();
+
+  // Subscribe to realtime updates
+  useEffect(() => {
+    const channel = supabase
+      .channel('marketplace-questions-changes')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'marketplace_questions',
+        },
+        (payload) => {
+          console.log('Realtime question update:', payload.eventType);
+          // Invalidate queries to refetch data
+          queryClient.invalidateQueries({ queryKey: ["marketplace-questions"] });
+          queryClient.invalidateQueries({ queryKey: ["marketplace-question-stats"] });
+          
+          // Show toast for new questions
+          if (payload.eventType === 'INSERT') {
+            toast.info("Nova pergunta recebida!", {
+              description: "Uma nova pergunta foi adicionada.",
+            });
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [queryClient]);
 
   return useQuery({
     queryKey: ["marketplace-questions", status, search, accountId],
