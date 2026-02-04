@@ -112,19 +112,35 @@ export function QuestionDetail({ question }: QuestionDetailProps) {
     ? `https://www.mercadolivre.com.br/p/${question.listing.external_id}`
     : null;
 
+  // Get product image from linked part
+  const productImage = question.listing?.part?.part_images
+    ?.sort((a, b) => (a.order_position ?? 0) - (b.order_position ?? 0))[0]?.file_path;
+
+  const imageUrl = productImage
+    ? `${import.meta.env.VITE_SUPABASE_URL}/storage/v1/object/public/part-images/${productImage}`
+    : null;
+
   return (
     <Card className="flex-1 flex flex-col overflow-hidden">
       <CardHeader className="pb-3 shrink-0 border-b border-border">
-        <div className="flex items-start justify-between">
-          <div className="flex items-center gap-4">
-            <div className="flex items-center justify-center w-14 h-14 rounded-xl bg-muted text-3xl">
-              📦
-            </div>
-            <div>
-              <CardTitle className="text-lg line-clamp-1">
+        <div className="flex items-start justify-between gap-4">
+          <div className="flex items-start gap-4 min-w-0 flex-1">
+            {imageUrl ? (
+              <img
+                src={imageUrl}
+                alt={question.listing?.titulo || "Produto"}
+                className="w-16 h-16 rounded-xl object-cover shrink-0 bg-muted"
+              />
+            ) : (
+              <div className="flex items-center justify-center w-16 h-16 rounded-xl bg-muted text-3xl shrink-0">
+                📦
+              </div>
+            )}
+            <div className="min-w-0 flex-1">
+              <CardTitle className="text-lg leading-tight">
                 {question.listing?.titulo || "Produto não encontrado"}
               </CardTitle>
-              <div className="flex items-center gap-2 mt-1">
+              <div className="flex items-center gap-2 mt-2">
                 <Badge className={config.color}>{config.label}</Badge>
                 <span className="text-sm text-muted-foreground">
                   {formatDistanceToNow(new Date(question.received_at), {
@@ -135,7 +151,7 @@ export function QuestionDetail({ question }: QuestionDetailProps) {
               </div>
             </div>
           </div>
-          <div className="flex gap-2">
+          <div className="flex gap-2 shrink-0">
             {mlItemUrl && (
               <Button
                 variant="outline"
