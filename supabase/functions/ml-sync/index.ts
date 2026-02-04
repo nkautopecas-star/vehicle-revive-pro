@@ -248,20 +248,26 @@ serve(async (req) => {
       const mlUserId = mlUser.id;
       console.log('ML User ID:', mlUserId);
 
-      // Fetch all active items from ML
-      let offset = 0;
-      const limit = 50;
+      // Fetch all active items from ML using scroll_id for pagination (supports >1000 items)
+      const limit = 100;
       let allItems: any[] = [];
+      let scrollId: string | null = null;
+      let hasMore = true;
       
-      while (true) {
-        const searchResult = await mlApiCall(
-          `/users/${mlUserId}/items/search?status=active&offset=${offset}&limit=${limit}`,
-          accessToken
-        );
+      while (hasMore) {
+        let endpoint = `/users/${mlUserId}/items/search?status=active&limit=${limit}`;
+        if (scrollId) {
+          endpoint += `&scroll_id=${scrollId}`;
+        }
         
-        console.log(`Fetched ${searchResult.results?.length || 0} item IDs (offset: ${offset})`);
+        const searchResult = await mlApiCall(endpoint, accessToken);
         
-        if (!searchResult.results || searchResult.results.length === 0) break;
+        console.log(`Fetched ${searchResult.results?.length || 0} item IDs (scroll_id: ${scrollId || 'initial'})`);
+        
+        if (!searchResult.results || searchResult.results.length === 0) {
+          hasMore = false;
+          break;
+        }
         
         // Get full item details in batches of 20
         const itemIds = searchResult.results;
@@ -279,8 +285,18 @@ serve(async (req) => {
           }
         }
         
-        if (searchResult.results.length < limit) break;
-        offset += limit;
+        // Use scroll_id for next page if available
+        if (searchResult.scroll_id) {
+          scrollId = searchResult.scroll_id;
+        } else {
+          hasMore = false;
+        }
+        
+        // Safety limit to prevent infinite loops
+        if (allItems.length >= 10000) {
+          console.log('Reached safety limit of 10000 items');
+          hasMore = false;
+        }
       }
 
       console.log(`Total items fetched from ML: ${allItems.length}`);
