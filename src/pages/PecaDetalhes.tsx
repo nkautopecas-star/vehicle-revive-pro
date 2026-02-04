@@ -33,7 +33,7 @@ import { cn } from "@/lib/utils";
 import { usePartDetails } from "@/hooks/usePartDetails";
 import { usePartCompatibilities } from "@/hooks/usePartCompatibilities";
 import { usePartStockMovements } from "@/hooks/useStockMovements";
-import { PartThumbnail } from "@/components/parts/PartThumbnail";
+import { PartImageGallery } from "@/components/parts/PartImageGallery";
 import { StockMovementDialog } from "@/components/parts/StockMovementDialog";
 
 const statusConfig = {
@@ -146,7 +146,6 @@ const PecaDetalhes = () => {
           <Card className="lg:col-span-2">
             <CardHeader className="pb-4">
               <div className="flex items-start gap-4">
-                <PartThumbnail partId={part.id} partName={part.nome} size="lg" />
                 <div className="flex-1">
                   <div className="flex items-center gap-2 mb-2">
                     <CardTitle className="text-xl">{part.nome}</CardTitle>
@@ -289,6 +288,13 @@ const PecaDetalhes = () => {
             </CardContent>
           </Card>
         </div>
+
+        {/* Image Gallery */}
+        <Card>
+          <CardContent className="pt-6">
+            <PartImageGallery partId={part.id} partName={part.nome} />
+          </CardContent>
+        </Card>
 
         {/* Stock Movements History */}
         <Card>
