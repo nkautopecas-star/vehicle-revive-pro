@@ -26,12 +26,13 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Plus, Search, MoreHorizontal, Edit, Trash2, Sparkles, MapPin, Package, Download, FileSpreadsheet } from "lucide-react";
+import { Plus, Search, MoreHorizontal, Edit, Trash2, Sparkles, MapPin, Package, Download, FileSpreadsheet, Upload } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useParts, useCategories, useCreatePart, useUpdatePart, useDeletePart, type Part, type PartFormData } from "@/hooks/useParts";
 import { PartFormDialog } from "@/components/parts/PartFormDialog";
 import { DeletePartDialog } from "@/components/parts/DeletePartDialog";
 import { PartThumbnail } from "@/components/parts/PartThumbnail";
+import { ImportPartsDialog } from "@/components/parts/ImportPartsDialog";
 import { exportToCSV, exportToExcel } from "@/utils/exportUtils";
 
 const statusConfig = {
@@ -55,6 +56,7 @@ const Pecas = () => {
   const [editingPart, setEditingPart] = useState<Part | null>(null);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [partToDelete, setPartToDelete] = useState<Part | null>(null);
+  const [isImportDialogOpen, setIsImportDialogOpen] = useState(false);
 
   const { data: parts = [], isLoading } = useParts();
   const { data: categories = [] } = useCategories();
@@ -164,6 +166,10 @@ const Pecas = () => {
           </div>
 
           <div className="flex gap-2">
+            <Button variant="outline" className="gap-2" onClick={() => setIsImportDialogOpen(true)}>
+              <Upload className="w-4 h-4" />
+              Importar
+            </Button>
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button variant="outline" className="gap-2">
@@ -405,6 +411,12 @@ const Pecas = () => {
         partName={partToDelete?.nome || ""}
         onConfirm={handleConfirmDelete}
         isLoading={deleteMutation.isPending}
+      />
+
+      {/* Import Parts Dialog */}
+      <ImportPartsDialog
+        open={isImportDialogOpen}
+        onOpenChange={setIsImportDialogOpen}
       />
     </AppLayout>
   );
