@@ -17,10 +17,21 @@ export interface MarketplaceQuestion {
     titulo: string;
     external_id: string | null;
     preco: number;
+    status: string;
+    part_id: string | null;
     marketplace_account?: {
       id: string;
       nome_conta: string;
       marketplace: "mercadolivre" | "shopee" | "olx";
+    };
+    part?: {
+      id: string;
+      nome: string;
+      part_images?: {
+        id: string;
+        file_path: string;
+        order_position: number | null;
+      }[];
     };
   };
 }
@@ -47,10 +58,20 @@ export function useMarketplaceQuestions(options: UseMarketplaceQuestionsOptions 
             external_id,
             preco,
             status,
+            part_id,
             marketplace_account:marketplace_accounts(
               id,
               nome_conta,
               marketplace
+            ),
+            part:parts(
+              id,
+              nome,
+              part_images(
+                id,
+                file_path,
+                order_position
+              )
             )
           )
         `)
