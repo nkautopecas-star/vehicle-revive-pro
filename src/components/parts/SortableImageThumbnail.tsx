@@ -2,7 +2,7 @@ import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { Button } from "@/components/ui/button";
 import { AspectRatio } from "@/components/ui/aspect-ratio";
-import { Trash2, ZoomIn, GripVertical } from "lucide-react";
+import { Trash2, ZoomIn, GripVertical, Star } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { PartImage } from "@/hooks/usePartImages";
 
@@ -12,7 +12,9 @@ interface SortableImageThumbnailProps {
   partName: string;
   onView: (index: number) => void;
   onDelete: (image: PartImage) => void;
+  onSetPrimary: (image: PartImage) => void;
   isDeleting: boolean;
+  isSettingPrimary: boolean;
 }
 
 export function SortableImageThumbnail({
@@ -21,7 +23,9 @@ export function SortableImageThumbnail({
   partName,
   onView,
   onDelete,
+  onSetPrimary,
   isDeleting,
+  isSettingPrimary,
 }: SortableImageThumbnailProps) {
   const {
     attributes,
@@ -36,6 +40,8 @@ export function SortableImageThumbnail({
     transform: CSS.Transform.toString(transform),
     transition,
   };
+
+  const isPrimary = index === 0;
 
   return (
     <div
@@ -60,6 +66,14 @@ export function SortableImageThumbnail({
         </div>
       </AspectRatio>
 
+      {/* Primary badge */}
+      {isPrimary && (
+        <div className="absolute bottom-2 left-2 px-2 py-0.5 rounded bg-primary text-primary-foreground text-xs font-medium flex items-center gap-1">
+          <Star className="w-3 h-3 fill-current" />
+          Principal
+        </div>
+      )}
+
       {/* Drag handle */}
       <div
         {...attributes}
@@ -68,6 +82,24 @@ export function SortableImageThumbnail({
       >
         <GripVertical className="w-4 h-4 text-muted-foreground" />
       </div>
+
+      {/* Set as primary button - only show if not already primary */}
+      {!isPrimary && (
+        <Button
+          type="button"
+          variant="secondary"
+          size="icon"
+          className="absolute top-2 left-11 w-7 h-7 opacity-0 group-hover:opacity-100 transition-opacity bg-background/80 backdrop-blur-sm border border-border hover:bg-warning/20 hover:text-warning"
+          onClick={(e) => {
+            e.stopPropagation();
+            onSetPrimary(image);
+          }}
+          disabled={isSettingPrimary}
+          title="Definir como foto principal"
+        >
+          <Star className="w-3.5 h-3.5" />
+        </Button>
+      )}
 
       {/* Delete button */}
       <Button

@@ -82,6 +82,19 @@ export function PartImageGallery({ partId, partName }: PartImageGalleryProps) {
     }
   };
 
+  const handleSetPrimary = (image: PartImage) => {
+    // Move the selected image to the first position
+    const currentImageIndex = images.findIndex((img) => img.id === image.id);
+    if (currentImageIndex <= 0) return; // Already first or not found
+
+    const newOrder = [...images];
+    const [movedImage] = newOrder.splice(currentImageIndex, 1);
+    newOrder.unshift(movedImage);
+    
+    const newImageIds = newOrder.map((img) => img.id);
+    reorderMutation.mutate({ partId, imageIds: newImageIds });
+  };
+
   const openLightbox = (index: number) => {
     setCurrentIndex(index);
     setLightboxOpen(true);
@@ -161,7 +174,9 @@ export function PartImageGallery({ partId, partName }: PartImageGalleryProps) {
                 partName={partName}
                 onView={openLightbox}
                 onDelete={handleDelete}
+                onSetPrimary={handleSetPrimary}
                 isDeleting={deleteMutation.isPending}
+                isSettingPrimary={reorderMutation.isPending}
               />
             ))}
 
