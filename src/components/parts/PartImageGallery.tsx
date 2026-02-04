@@ -1,8 +1,23 @@
 import { useState } from "react";
+import {
+  DndContext,
+  closestCenter,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  DragEndEvent,
+} from "@dnd-kit/core";
+import {
+  arrayMove,
+  SortableContext,
+  sortableKeyboardCoordinates,
+  rectSortingStrategy,
+} from "@dnd-kit/sortable";
 import { usePartImages, useUploadPartImage, useDeletePartImage, type PartImage } from "@/hooks/usePartImages";
+import { useReorderPartImages } from "@/hooks/useReorderPartImages";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
-import { AspectRatio } from "@/components/ui/aspect-ratio";
 import { Skeleton } from "@/components/ui/skeleton";
 import { 
   ImagePlus, 
@@ -12,9 +27,9 @@ import {
   Trash2, 
   Loader2,
   Image as ImageIcon,
-  ZoomIn
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { SortableImageThumbnail } from "./SortableImageThumbnail";
 
 interface PartImageGalleryProps {
   partId: string;
@@ -25,10 +40,22 @@ export function PartImageGallery({ partId, partName }: PartImageGalleryProps) {
   const { data: images = [], isLoading } = usePartImages(partId);
   const uploadMutation = useUploadPartImage();
   const deleteMutation = useDeletePartImage();
+  const reorderMutation = useReorderPartImages();
   
   const [lightboxOpen, setLightboxOpen] = useState(false);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [dragOver, setDragOver] = useState(false);
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, {
+      activationConstraint: {
+        distance: 8,
+      },
+    }),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    })
+  );
 
   const handleFileChange = async (files: FileList | null) => {
     if (!files) return;
@@ -74,6 +101,20 @@ export function PartImageGallery({ partId, partName }: PartImageGalleryProps) {
     if (e.key === 'Escape') setLightboxOpen(false);
   };
 
+  const handleDragEnd = (event: DragEndEvent) => {
+    const { active, over } = event;
+
+    if (over && active.id !== over.id) {
+      const oldIndex = images.findIndex((img) => img.id === active.id);
+      const newIndex = images.findIndex((img) => img.id === over.id);
+
+      const newOrder = arrayMove(images, oldIndex, newIndex);
+      const newImageIds = newOrder.map((img) => img.id);
+
+      reorderMutation.mutate({ partId, imageIds: newImageIds });
+    }
+  };
+
   if (isLoading) {
     return (
       <div className="space-y-4">
@@ -96,74 +137,67 @@ export function PartImageGallery({ partId, partName }: PartImageGalleryProps) {
         <h3 className="text-base font-semibold flex items-center gap-2">
           <ImageIcon className="w-4 h-4" />
           Fotos ({images.length})
+          {images.length > 1 && (
+            <span className="text-xs text-muted-foreground font-normal">
+              — arraste para reordenar
+            </span>
+          )}
         </h3>
       </div>
 
-      {/* Image Grid */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
-        {images.map((image, index) => (
-          <div 
-            key={image.id} 
-            className="relative group cursor-pointer"
-            onClick={() => openLightbox(index)}
-          >
-            <AspectRatio ratio={1}>
-              <img
-                src={image.url}
-                alt={`${partName} - Foto ${index + 1}`}
-                className="w-full h-full object-cover rounded-lg border border-border transition-transform group-hover:scale-[1.02]"
+      {/* Image Grid with DnD */}
+      <DndContext
+        sensors={sensors}
+        collisionDetection={closestCenter}
+        onDragEnd={handleDragEnd}
+      >
+        <SortableContext items={images.map((img) => img.id)} strategy={rectSortingStrategy}>
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
+            {images.map((image, index) => (
+              <SortableImageThumbnail
+                key={image.id}
+                image={image}
+                index={index}
+                partName={partName}
+                onView={openLightbox}
+                onDelete={handleDelete}
+                isDeleting={deleteMutation.isPending}
               />
-              <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors rounded-lg flex items-center justify-center">
-                <ZoomIn className="w-6 h-6 text-white opacity-0 group-hover:opacity-100 transition-opacity" />
-              </div>
-            </AspectRatio>
-            <Button
-              type="button"
-              variant="destructive"
-              size="icon"
-              className="absolute top-2 right-2 w-7 h-7 opacity-0 group-hover:opacity-100 transition-opacity"
-              onClick={(e) => {
-                e.stopPropagation();
-                handleDelete(image);
-              }}
-              disabled={deleteMutation.isPending}
-            >
-              <Trash2 className="w-3.5 h-3.5" />
-            </Button>
-          </div>
-        ))}
+            ))}
 
-        {/* Upload Area */}
-        <div
-          onDrop={handleDrop}
-          onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
-          onDragLeave={() => setDragOver(false)}
-          className={cn(
-            "aspect-square border-2 border-dashed rounded-lg flex flex-col items-center justify-center gap-2 transition-colors cursor-pointer",
-            dragOver ? "border-primary bg-primary/5" : "border-muted-foreground/25 hover:border-primary/50"
-          )}
-        >
-          <input
-            type="file"
-            accept="image/jpeg,image/png,image/webp,image/gif"
-            multiple
-            className="hidden"
-            id="gallery-upload"
-            onChange={(e) => handleFileChange(e.target.files)}
-            disabled={uploadMutation.isPending}
-          />
-          <label htmlFor="gallery-upload" className="cursor-pointer flex flex-col items-center gap-2 p-4">
-            {uploadMutation.isPending ? (
-              <Loader2 className="w-8 h-8 text-muted-foreground animate-spin" />
-            ) : (
-              <ImagePlus className="w-8 h-8 text-muted-foreground" />
-            )}
-            <span className="text-xs text-muted-foreground text-center">
-              {uploadMutation.isPending ? "Enviando..." : "Adicionar foto"}
-            </span>
-          </label>
-        </div>
-      </div>
+            {/* Upload Area */}
+            <div
+              onDrop={handleDrop}
+              onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
+              onDragLeave={() => setDragOver(false)}
+              className={cn(
+                "aspect-square border-2 border-dashed rounded-lg flex flex-col items-center justify-center gap-2 transition-colors cursor-pointer",
+                dragOver ? "border-primary bg-primary/5" : "border-muted-foreground/25 hover:border-primary/50"
+              )}
+            >
+              <input
+                type="file"
+                accept="image/jpeg,image/png,image/webp,image/gif"
+                multiple
+                className="hidden"
+                id="gallery-upload"
+                onChange={(e) => handleFileChange(e.target.files)}
+                disabled={uploadMutation.isPending}
+              />
+              <label htmlFor="gallery-upload" className="cursor-pointer flex flex-col items-center gap-2 p-4">
+                {uploadMutation.isPending ? (
+                  <Loader2 className="w-8 h-8 text-muted-foreground animate-spin" />
+                ) : (
+                  <ImagePlus className="w-8 h-8 text-muted-foreground" />
+                )}
+                <span className="text-xs text-muted-foreground text-center">
+                  {uploadMutation.isPending ? "Enviando..." : "Adicionar foto"}
+                </span>
+              </label>
+            </div>
+          </div>
+        </SortableContext>
+      </DndContext>
 
       {/* Empty State */}
       {images.length === 0 && (
