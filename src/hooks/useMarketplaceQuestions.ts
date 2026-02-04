@@ -145,7 +145,51 @@ export function useAnswerQuestion() {
       answer: string;
       externalId?: string | null;
     }) => {
-      // First update the local database
+      // Get the question with listing and account info to send to ML
+      const { data: question, error: questionError } = await supabase
+        .from("marketplace_questions")
+        .select(`
+          id,
+          external_id,
+          listing:marketplace_listings(
+            marketplace_account_id
+          )
+        `)
+        .eq("id", questionId)
+        .single();
+
+      if (questionError || !question) {
+        throw new Error("Pergunta não encontrada");
+      }
+
+      const accountId = question.listing?.marketplace_account_id;
+
+      // If we have an external_id and account, send to Mercado Livre first
+      if (question.external_id && accountId) {
+        const { data, error: mlError } = await supabase.functions.invoke("ml-questions", {
+          body: {
+            action: "answer_question",
+            account_id: accountId,
+            question_id: questionId,
+            answer,
+          },
+        });
+
+        if (mlError) {
+          console.error("ML API Error:", mlError);
+          throw new Error("Erro ao enviar resposta para o Mercado Livre");
+        }
+
+        if (data?.error) {
+          console.error("ML API Error:", data.error, data.details);
+          throw new Error(data.details || data.error || "Erro ao enviar resposta para o Mercado Livre");
+        }
+
+        // The edge function already updates the database, so we're done
+        return;
+      }
+
+      // Fallback: If no external_id, just update the local database
       const { error } = await supabase
         .from("marketplace_questions")
         .update({
@@ -156,23 +200,16 @@ export function useAnswerQuestion() {
         .eq("id", questionId);
 
       if (error) throw error;
-
-      // If there's an external_id, we should also send the answer to the marketplace
-      // This would be done via an edge function in a real implementation
-      if (externalId) {
-        // TODO: Call edge function to send answer to Mercado Livre
-        console.log("Would send answer to ML for question:", externalId);
-      }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["marketplace-questions"] });
       queryClient.invalidateQueries({ queryKey: ["marketplace-question-stats"] });
       queryClient.invalidateQueries({ queryKey: ["recent-activity"] });
-      toast.success("Resposta enviada com sucesso!");
+      toast.success("Resposta enviada com sucesso para o Mercado Livre!");
     },
     onError: (error) => {
       console.error("Error answering question:", error);
-      toast.error("Erro ao enviar resposta. Tente novamente.");
+      toast.error(error instanceof Error ? error.message : "Erro ao enviar resposta. Tente novamente.");
     },
   });
 }
