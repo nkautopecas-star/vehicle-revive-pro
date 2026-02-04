@@ -1,4 +1,5 @@
 import { useState, useMemo } from "react";
+import { Link } from "react-router-dom";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -26,7 +27,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Plus, Search, MoreHorizontal, Edit, Trash2, Sparkles, MapPin, Package, Download, FileSpreadsheet, Upload, Car } from "lucide-react";
+import { Plus, Search, MoreHorizontal, Edit, Trash2, Sparkles, MapPin, Package, Download, FileSpreadsheet, Upload, Car, Eye } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useParts, useCategories, useCreatePart, useUpdatePart, useDeletePart, type Part, type PartFormData } from "@/hooks/useParts";
 import { useAllPartCompatibilities, filterPartsByCompatibility } from "@/hooks/usePartsWithCompatibilities";
@@ -340,13 +341,13 @@ const Pecas = () => {
                   filteredParts.map((part) => (
                     <TableRow key={part.id} className="border-border hover:bg-muted/50">
                       <TableCell>
-                        <div className="flex items-center gap-3">
+                        <Link to={`/pecas/${part.id}`} className="flex items-center gap-3 hover:opacity-80 transition-opacity">
                           <PartThumbnail partId={part.id} partName={part.nome} />
                           <div>
-                            <p className="font-medium">{part.nome}</p>
+                            <p className="font-medium hover:text-primary transition-colors">{part.nome}</p>
                             <p className="text-xs text-muted-foreground">{part.categoria_nome || "Sem categoria"}</p>
                           </div>
-                        </div>
+                        </Link>
                       </TableCell>
                       <TableCell>
                         <div className="font-mono text-xs">
@@ -391,6 +392,12 @@ const Pecas = () => {
                             </Button>
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="end">
+                            <DropdownMenuItem className="gap-2" asChild>
+                              <Link to={`/pecas/${part.id}`}>
+                                <Eye className="w-4 h-4" />
+                                Ver Detalhes
+                              </Link>
+                            </DropdownMenuItem>
                             <DropdownMenuItem className="gap-2">
                               <Sparkles className="w-4 h-4" />
                               Gerar anúncio IA
