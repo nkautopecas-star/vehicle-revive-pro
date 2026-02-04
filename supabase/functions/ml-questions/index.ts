@@ -100,6 +100,9 @@ serve(async (req) => {
             .eq('external_id', q.item_id)
             .single();
 
+          // Get image URL from item
+          const imageUrl = item.pictures?.[0]?.url || item.pictures?.[0]?.secure_url || item.thumbnail || null;
+          
           // If listing doesn't exist, create it
           if (!listing) {
             console.log('Creating listing for item:', q.item_id);
@@ -121,6 +124,7 @@ serve(async (req) => {
                 status,
                 marketplace_account_id: account_id,
                 last_sync: new Date().toISOString(),
+                image_url: imageUrl,
               })
               .select('id')
               .single();
@@ -132,6 +136,13 @@ serve(async (req) => {
 
             listing = newListing;
             console.log('Created listing:', listing.id);
+          } else if (imageUrl) {
+            // Update existing listing with image if it doesn't have one
+            await supabase
+              .from('marketplace_listings')
+              .update({ image_url: imageUrl })
+              .eq('external_id', q.item_id)
+              .is('image_url', null);
           }
 
           // Check if question already exists
