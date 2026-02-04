@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Skeleton } from "@/components/ui/skeleton";
 import {
   Table,
   TableBody,
@@ -19,126 +20,17 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from "@/components/ui/dialog";
-import { Label } from "@/components/ui/label";
-import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Textarea } from "@/components/ui/textarea";
-import { Plus, Search, MoreHorizontal, Package, Eye, Edit, Trash2, Sparkles, MapPin } from "lucide-react";
+import { Plus, Search, MoreHorizontal, Package, Edit, Trash2, Sparkles, MapPin } from "lucide-react";
 import { cn } from "@/lib/utils";
-
-interface Part {
-  id: string;
-  nome: string;
-  codigoInterno: string;
-  codigoOEM: string;
-  categoria: string;
-  condicao: "nova" | "usada" | "recondicionada";
-  veiculoOrigem: string;
-  quantidade: number;
-  localizacao: string;
-  precoCusto: number;
-  precoVenda: number;
-  status: "ativa" | "vendida" | "pausada";
-}
-
-const mockParts: Part[] = [
-  {
-    id: "1",
-    nome: "Motor Completo",
-    codigoInterno: "MOT-001",
-    codigoOEM: "11000-PNB-A00",
-    categoria: "Motor",
-    condicao: "usada",
-    veiculoOrigem: "Honda Civic 2019",
-    quantidade: 1,
-    localizacao: "A1-E2-P3",
-    precoCusto: 3500,
-    precoVenda: 5500,
-    status: "ativa",
-  },
-  {
-    id: "2",
-    nome: "Câmbio Automático",
-    codigoInterno: "CAM-002",
-    codigoOEM: "20011-RZA-A01",
-    categoria: "Transmissão",
-    condicao: "usada",
-    veiculoOrigem: "Toyota Corolla 2020",
-    quantidade: 1,
-    localizacao: "A2-E1-P1",
-    precoCusto: 2800,
-    precoVenda: 4200,
-    status: "ativa",
-  },
-  {
-    id: "3",
-    nome: "Farol LED Esquerdo",
-    codigoInterno: "FAR-003",
-    codigoOEM: "2AB63E-001",
-    categoria: "Iluminação",
-    condicao: "usada",
-    veiculoOrigem: "VW Polo 2021",
-    quantidade: 5,
-    localizacao: "B1-E3-P2",
-    precoCusto: 280,
-    precoVenda: 450,
-    status: "ativa",
-  },
-  {
-    id: "4",
-    nome: "Painel de Instrumentos",
-    codigoInterno: "PAN-004",
-    codigoOEM: "735573645",
-    categoria: "Interior",
-    condicao: "usada",
-    veiculoOrigem: "Fiat Argo 2020",
-    quantidade: 2,
-    localizacao: "C1-E2-P4",
-    precoCusto: 350,
-    precoVenda: 550,
-    status: "pausada",
-  },
-  {
-    id: "5",
-    nome: "Porta Dianteira Direita",
-    codigoInterno: "POR-005",
-    codigoOEM: "52101-02130",
-    categoria: "Carroceria",
-    condicao: "usada",
-    veiculoOrigem: "Chevrolet Onix 2019",
-    quantidade: 3,
-    localizacao: "D1-E1-P1",
-    precoCusto: 400,
-    precoVenda: 680,
-    status: "ativa",
-  },
-  {
-    id: "6",
-    nome: "Alternador",
-    codigoInterno: "ALT-006",
-    codigoOEM: "37300-2B300",
-    categoria: "Elétrica",
-    condicao: "recondicionada",
-    veiculoOrigem: "Hyundai HB20 2018",
-    quantidade: 4,
-    localizacao: "A3-E2-P2",
-    precoCusto: 180,
-    precoVenda: 320,
-    status: "ativa",
-  },
-];
+import { useParts, useCategories, useCreatePart, useUpdatePart, useDeletePart, type Part, type PartFormData } from "@/hooks/useParts";
+import { PartFormDialog } from "@/components/parts/PartFormDialog";
+import { DeletePartDialog } from "@/components/parts/DeletePartDialog";
 
 const statusConfig = {
   ativa: { label: "Ativa", className: "bg-success/20 text-success hover:bg-success/30" },
@@ -156,23 +48,77 @@ const Pecas = () => {
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [categoriaFilter, setCategoriaFilter] = useState<string>("all");
-  const [isDialogOpen, setIsDialogOpen] = useState(false);
+  
+  const [isFormDialogOpen, setIsFormDialogOpen] = useState(false);
+  const [editingPart, setEditingPart] = useState<Part | null>(null);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [partToDelete, setPartToDelete] = useState<Part | null>(null);
 
-  const categorias = [...new Set(mockParts.map((p) => p.categoria))];
+  const { data: parts = [], isLoading } = useParts();
+  const { data: categories = [] } = useCategories();
+  const createMutation = useCreatePart();
+  const updateMutation = useUpdatePart();
+  const deleteMutation = useDeletePart();
 
-  const filteredParts = mockParts.filter((part) => {
+  const filteredParts = parts.filter((part) => {
     const matchesSearch =
       part.nome.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      part.codigoInterno.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      part.codigoOEM.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      part.veiculoOrigem.toLowerCase().includes(searchTerm.toLowerCase());
+      (part.codigo_interno?.toLowerCase().includes(searchTerm.toLowerCase()) ?? false) ||
+      (part.codigo_oem?.toLowerCase().includes(searchTerm.toLowerCase()) ?? false) ||
+      (part.veiculo_info?.toLowerCase().includes(searchTerm.toLowerCase()) ?? false);
     const matchesStatus = statusFilter === "all" || part.status === statusFilter;
-    const matchesCategoria = categoriaFilter === "all" || part.categoria === categoriaFilter;
+    const matchesCategoria = categoriaFilter === "all" || part.categoria_id === categoriaFilter;
     return matchesSearch && matchesStatus && matchesCategoria;
   });
 
   const totalEstoque = filteredParts.reduce((acc, p) => acc + p.quantidade, 0);
-  const valorEstoque = filteredParts.reduce((acc, p) => acc + p.precoVenda * p.quantidade, 0);
+  const valorEstoque = filteredParts.reduce((acc, p) => acc + (p.preco_venda || 0) * p.quantidade, 0);
+  const uniqueCategories = [...new Set(parts.map((p) => p.categoria_nome).filter(Boolean))];
+
+  const handleCreatePart = (data: PartFormData) => {
+    createMutation.mutate(data, {
+      onSuccess: () => {
+        setIsFormDialogOpen(false);
+      },
+    });
+  };
+
+  const handleEditPart = (part: Part) => {
+    setEditingPart(part);
+    setIsFormDialogOpen(true);
+  };
+
+  const handleUpdatePart = (data: PartFormData) => {
+    if (!editingPart) return;
+    updateMutation.mutate({ id: editingPart.id, data }, {
+      onSuccess: () => {
+        setIsFormDialogOpen(false);
+        setEditingPart(null);
+      },
+    });
+  };
+
+  const handleDeleteClick = (part: Part) => {
+    setPartToDelete(part);
+    setDeleteDialogOpen(true);
+  };
+
+  const handleConfirmDelete = () => {
+    if (!partToDelete) return;
+    deleteMutation.mutate(partToDelete.id, {
+      onSuccess: () => {
+        setDeleteDialogOpen(false);
+        setPartToDelete(null);
+      },
+    });
+  };
+
+  const handleDialogClose = (open: boolean) => {
+    setIsFormDialogOpen(open);
+    if (!open) {
+      setEditingPart(null);
+    }
+  };
 
   return (
     <AppLayout title="Peças" description="Gerencie o catálogo de peças do seu estoque">
@@ -206,9 +152,9 @@ const Pecas = () => {
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">Todas</SelectItem>
-                {categorias.map((cat) => (
-                  <SelectItem key={cat} value={cat}>
-                    {cat}
+                {categories.map((cat) => (
+                  <SelectItem key={cat.id} value={cat.id}>
+                    {cat.name}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -220,114 +166,10 @@ const Pecas = () => {
               <Sparkles className="w-4 h-4" />
               Gerar com IA
             </Button>
-            <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-              <DialogTrigger asChild>
-                <Button className="gap-2">
-                  <Plus className="w-4 h-4" />
-                  Nova Peça
-                </Button>
-              </DialogTrigger>
-              <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-                <DialogHeader>
-                  <DialogTitle>Cadastrar Peça</DialogTitle>
-                  <DialogDescription>
-                    Preencha os dados da peça para adicionar ao estoque.
-                  </DialogDescription>
-                </DialogHeader>
-                <form className="grid gap-4 py-4">
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <Label htmlFor="nome">Nome da Peça</Label>
-                      <Input id="nome" placeholder="Motor Completo" />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="categoria">Categoria</Label>
-                      <Select>
-                        <SelectTrigger id="categoria">
-                          <SelectValue placeholder="Selecione" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="motor">Motor</SelectItem>
-                          <SelectItem value="transmissao">Transmissão</SelectItem>
-                          <SelectItem value="iluminacao">Iluminação</SelectItem>
-                          <SelectItem value="interior">Interior</SelectItem>
-                          <SelectItem value="carroceria">Carroceria</SelectItem>
-                          <SelectItem value="eletrica">Elétrica</SelectItem>
-                          <SelectItem value="suspensao">Suspensão</SelectItem>
-                          <SelectItem value="freios">Freios</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-                  </div>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <Label htmlFor="codigoInterno">Código Interno</Label>
-                      <Input id="codigoInterno" placeholder="MOT-001" />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="codigoOEM">Código OEM</Label>
-                      <Input id="codigoOEM" placeholder="11000-PNB-A00" />
-                    </div>
-                  </div>
-                  <div className="grid grid-cols-3 gap-4">
-                    <div className="space-y-2">
-                      <Label htmlFor="condicao">Condição</Label>
-                      <Select>
-                        <SelectTrigger id="condicao">
-                          <SelectValue placeholder="Selecione" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="nova">Nova</SelectItem>
-                          <SelectItem value="usada">Usada</SelectItem>
-                          <SelectItem value="recondicionada">Recondicionada</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="quantidade">Quantidade</Label>
-                      <Input id="quantidade" type="number" placeholder="1" />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="localizacao">Localização</Label>
-                      <Input id="localizacao" placeholder="A1-E2-P3" />
-                    </div>
-                  </div>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <Label htmlFor="precoCusto">Preço de Custo (R$)</Label>
-                      <Input id="precoCusto" type="number" placeholder="0.00" />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="precoVenda">Preço de Venda (R$)</Label>
-                      <Input id="precoVenda" type="number" placeholder="0.00" />
-                    </div>
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="veiculoOrigem">Veículo de Origem</Label>
-                    <Select>
-                      <SelectTrigger id="veiculoOrigem">
-                        <SelectValue placeholder="Selecione o veículo" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="1">Honda Civic 2019 - ABC-1234</SelectItem>
-                        <SelectItem value="2">Toyota Corolla 2020 - XYZ-5678</SelectItem>
-                        <SelectItem value="3">VW Polo 2021 - DEF-9012</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="observacoes">Observações</Label>
-                    <Textarea id="observacoes" placeholder="Observações sobre a peça..." rows={3} />
-                  </div>
-                  <div className="flex justify-end gap-3 mt-4">
-                    <Button type="button" variant="outline" onClick={() => setIsDialogOpen(false)}>
-                      Cancelar
-                    </Button>
-                    <Button type="submit">Salvar Peça</Button>
-                  </div>
-                </form>
-              </DialogContent>
-            </Dialog>
+            <Button className="gap-2" onClick={() => setIsFormDialogOpen(true)}>
+              <Plus className="w-4 h-4" />
+              Nova Peça
+            </Button>
           </div>
         </div>
 
@@ -339,7 +181,11 @@ const Pecas = () => {
                 <Package className="w-5 h-5 text-primary" />
               </div>
               <div>
-                <p className="text-2xl font-bold">{filteredParts.length}</p>
+                {isLoading ? (
+                  <Skeleton className="h-8 w-12" />
+                ) : (
+                  <p className="text-2xl font-bold">{filteredParts.length}</p>
+                )}
                 <p className="text-xs text-muted-foreground">Tipos de Peças</p>
               </div>
             </div>
@@ -350,7 +196,11 @@ const Pecas = () => {
                 <Package className="w-5 h-5 text-success" />
               </div>
               <div>
-                <p className="text-2xl font-bold">{totalEstoque}</p>
+                {isLoading ? (
+                  <Skeleton className="h-8 w-12" />
+                ) : (
+                  <p className="text-2xl font-bold">{totalEstoque}</p>
+                )}
                 <p className="text-xs text-muted-foreground">Unidades em Estoque</p>
               </div>
             </div>
@@ -361,7 +211,11 @@ const Pecas = () => {
                 <MapPin className="w-5 h-5 text-info" />
               </div>
               <div>
-                <p className="text-2xl font-bold">{categorias.length}</p>
+                {isLoading ? (
+                  <Skeleton className="h-8 w-12" />
+                ) : (
+                  <p className="text-2xl font-bold">{uniqueCategories.length}</p>
+                )}
                 <p className="text-xs text-muted-foreground">Categorias</p>
               </div>
             </div>
@@ -372,7 +226,15 @@ const Pecas = () => {
                 <span className="text-lg font-bold text-warning">R$</span>
               </div>
               <div>
-                <p className="text-2xl font-bold">{(valorEstoque / 1000).toFixed(0)}k</p>
+                {isLoading ? (
+                  <Skeleton className="h-8 w-16" />
+                ) : (
+                  <p className="text-2xl font-bold">
+                    {valorEstoque >= 1000 
+                      ? `${(valorEstoque / 1000).toFixed(0)}k` 
+                      : valorEstoque.toFixed(0)}
+                  </p>
+                )}
                 <p className="text-xs text-muted-foreground">Valor em Estoque</p>
               </div>
             </div>
@@ -397,77 +259,124 @@ const Pecas = () => {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {filteredParts.map((part) => (
-                  <TableRow key={part.id} className="border-border hover:bg-muted/50">
-                    <TableCell>
-                      <div>
-                        <p className="font-medium">{part.nome}</p>
-                        <p className="text-xs text-muted-foreground">{part.categoria}</p>
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <div className="font-mono text-xs">
-                        <p>{part.codigoInterno}</p>
-                        <p className="text-muted-foreground">{part.codigoOEM}</p>
-                      </div>
-                    </TableCell>
-                    <TableCell className="text-muted-foreground">{part.veiculoOrigem}</TableCell>
-                    <TableCell>
-                      <Badge variant="outline" className={cn("font-medium", condicaoConfig[part.condicao].className)}>
-                        {condicaoConfig[part.condicao].label}
-                      </Badge>
-                    </TableCell>
-                    <TableCell className="text-right font-medium">{part.quantidade}</TableCell>
-                    <TableCell className="font-mono text-sm">{part.localizacao}</TableCell>
-                    <TableCell className="text-right">
-                      <div>
-                        <p className="font-medium text-primary">
-                          R$ {part.precoVenda.toLocaleString("pt-BR")}
-                        </p>
-                        <p className="text-xs text-muted-foreground">
-                          Custo: R$ {part.precoCusto.toLocaleString("pt-BR")}
-                        </p>
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <Badge className={cn("font-medium", statusConfig[part.status].className)}>
-                        {statusConfig[part.status].label}
-                      </Badge>
-                    </TableCell>
-                    <TableCell>
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button variant="ghost" size="icon" className="h-8 w-8">
-                            <MoreHorizontal className="w-4 h-4" />
-                          </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end">
-                          <DropdownMenuItem className="gap-2">
-                            <Eye className="w-4 h-4" />
-                            Ver detalhes
-                          </DropdownMenuItem>
-                          <DropdownMenuItem className="gap-2">
-                            <Sparkles className="w-4 h-4" />
-                            Gerar anúncio IA
-                          </DropdownMenuItem>
-                          <DropdownMenuItem className="gap-2">
-                            <Edit className="w-4 h-4" />
-                            Editar
-                          </DropdownMenuItem>
-                          <DropdownMenuItem className="gap-2 text-destructive focus:text-destructive">
-                            <Trash2 className="w-4 h-4" />
-                            Excluir
-                          </DropdownMenuItem>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
+                {isLoading ? (
+                  Array.from({ length: 5 }).map((_, i) => (
+                    <TableRow key={i} className="border-border">
+                      <TableCell><Skeleton className="h-10 w-32" /></TableCell>
+                      <TableCell><Skeleton className="h-8 w-24" /></TableCell>
+                      <TableCell><Skeleton className="h-4 w-32" /></TableCell>
+                      <TableCell><Skeleton className="h-6 w-20" /></TableCell>
+                      <TableCell><Skeleton className="h-4 w-8" /></TableCell>
+                      <TableCell><Skeleton className="h-4 w-20" /></TableCell>
+                      <TableCell><Skeleton className="h-8 w-20" /></TableCell>
+                      <TableCell><Skeleton className="h-6 w-16" /></TableCell>
+                      <TableCell><Skeleton className="h-8 w-8" /></TableCell>
+                    </TableRow>
+                  ))
+                ) : filteredParts.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={9} className="text-center py-12 text-muted-foreground">
+                      {parts.length === 0 
+                        ? "Nenhuma peça cadastrada. Clique em 'Nova Peça' para começar."
+                        : "Nenhuma peça encontrada com os filtros aplicados."}
                     </TableCell>
                   </TableRow>
-                ))}
+                ) : (
+                  filteredParts.map((part) => (
+                    <TableRow key={part.id} className="border-border hover:bg-muted/50">
+                      <TableCell>
+                        <div>
+                          <p className="font-medium">{part.nome}</p>
+                          <p className="text-xs text-muted-foreground">{part.categoria_nome || "Sem categoria"}</p>
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        <div className="font-mono text-xs">
+                          <p>{part.codigo_interno || "-"}</p>
+                          <p className="text-muted-foreground">{part.codigo_oem || "-"}</p>
+                        </div>
+                      </TableCell>
+                      <TableCell className="text-muted-foreground">
+                        {part.veiculo_info || "-"}
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant="outline" className={cn("font-medium", condicaoConfig[part.condicao].className)}>
+                          {condicaoConfig[part.condicao].label}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="text-right font-medium">{part.quantidade}</TableCell>
+                      <TableCell className="font-mono text-sm">{part.localizacao || "-"}</TableCell>
+                      <TableCell className="text-right">
+                        <div>
+                          <p className="font-medium text-primary">
+                            {part.preco_venda 
+                              ? `R$ ${part.preco_venda.toLocaleString("pt-BR")}`
+                              : "-"}
+                          </p>
+                          <p className="text-xs text-muted-foreground">
+                            {part.preco_custo 
+                              ? `Custo: R$ ${part.preco_custo.toLocaleString("pt-BR")}`
+                              : ""}
+                          </p>
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        <Badge className={cn("font-medium", statusConfig[part.status].className)}>
+                          {statusConfig[part.status].label}
+                        </Badge>
+                      </TableCell>
+                      <TableCell>
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button variant="ghost" size="icon" className="h-8 w-8">
+                              <MoreHorizontal className="w-4 h-4" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            <DropdownMenuItem className="gap-2">
+                              <Sparkles className="w-4 h-4" />
+                              Gerar anúncio IA
+                            </DropdownMenuItem>
+                            <DropdownMenuItem className="gap-2" onClick={() => handleEditPart(part)}>
+                              <Edit className="w-4 h-4" />
+                              Editar
+                            </DropdownMenuItem>
+                            <DropdownMenuItem 
+                              className="gap-2 text-destructive focus:text-destructive"
+                              onClick={() => handleDeleteClick(part)}
+                            >
+                              <Trash2 className="w-4 h-4" />
+                              Excluir
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      </TableCell>
+                    </TableRow>
+                  ))
+                )}
               </TableBody>
             </Table>
           </CardContent>
         </Card>
       </div>
+
+      {/* Part Form Dialog */}
+      <PartFormDialog
+        open={isFormDialogOpen}
+        onOpenChange={handleDialogClose}
+        part={editingPart}
+        onSubmit={editingPart ? handleUpdatePart : handleCreatePart}
+        isLoading={createMutation.isPending || updateMutation.isPending}
+      />
+
+      {/* Delete Confirmation Dialog */}
+      <DeletePartDialog
+        open={deleteDialogOpen}
+        onOpenChange={setDeleteDialogOpen}
+        partName={partToDelete?.nome || ""}
+        onConfirm={handleConfirmDelete}
+        isLoading={deleteMutation.isPending}
+      />
     </AppLayout>
   );
 };
