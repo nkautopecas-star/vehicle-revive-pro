@@ -2,3 +2,15 @@ project_id = "hkevciajobafqklpmlth"
 
 [functions.suggest-compatibilities]
 verify_jwt = false
+
+[functions.ml-oauth]
+verify_jwt = false
+
+[functions.ml-sync]
+verify_jwt = false
+
+[functions.ml-questions]
+verify_jwt = false
+
+[functions.ml-webhook]
+verify_jwt = false
