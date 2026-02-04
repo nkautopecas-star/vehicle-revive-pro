@@ -33,6 +33,7 @@ import { usePartDetails } from "@/hooks/usePartDetails";
 import { usePartCompatibilities } from "@/hooks/usePartCompatibilities";
 import { usePartStockMovements } from "@/hooks/useStockMovements";
 import { PartThumbnail } from "@/components/parts/PartThumbnail";
+import { StockMovementDialog } from "@/components/parts/StockMovementDialog";
 
 const statusConfig = {
   ativa: { label: "Ativa", className: "bg-success/20 text-success" },
@@ -282,11 +283,21 @@ const PecaDetalhes = () => {
 
         {/* Stock Movements History */}
         <Card>
-          <CardHeader>
+          <CardHeader className="flex flex-row items-center justify-between">
             <CardTitle className="text-base flex items-center gap-2">
               <Package className="w-4 h-4" />
               Histórico de Movimentações
             </CardTitle>
+            <StockMovementDialog
+              partId={part.id}
+              partName={part.nome}
+              currentQuantity={part.quantidade}
+            >
+              <Button size="sm">
+                <Package className="w-4 h-4 mr-2" />
+                Nova Movimentação
+              </Button>
+            </StockMovementDialog>
           </CardHeader>
           <CardContent className="p-0">
             <Table>
