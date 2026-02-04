@@ -39,6 +39,12 @@ export function useAllPartCompatibilities() {
   });
 }
 
+export interface AdvancedCompatibilityFilter {
+  marca: string;
+  modelo: string;
+  ano: number | null;
+}
+
 export function filterPartsByCompatibility(
   partIds: string[],
   compatibilityMap: Map<string, PartWithCompatibility['compatibilities']>,
@@ -67,6 +73,49 @@ export function filterPartsByCompatibility(
       }
       
       return marcaMatch || modeloMatch || fullMatch || yearMatch;
+    });
+
+    if (hasMatch) {
+      matchingPartIds.add(partId);
+    }
+  });
+
+  return matchingPartIds;
+}
+
+export function filterPartsByAdvancedCompatibility(
+  partIds: string[],
+  compatibilityMap: Map<string, PartWithCompatibility['compatibilities']>,
+  filter: AdvancedCompatibilityFilter
+): Set<string> {
+  // If no filter is set, return all parts
+  if (!filter.marca && !filter.modelo && !filter.ano) {
+    return new Set(partIds);
+  }
+
+  const matchingPartIds = new Set<string>();
+
+  partIds.forEach(partId => {
+    const compatibilities = compatibilityMap.get(partId) || [];
+    
+    const hasMatch = compatibilities.some(compat => {
+      // Check brand match
+      const marcaMatch = !filter.marca || 
+        compat.marca.toLowerCase() === filter.marca.toLowerCase();
+      
+      // Check model match
+      const modeloMatch = !filter.modelo || 
+        compat.modelo.toLowerCase() === filter.modelo.toLowerCase();
+      
+      // Check year match (year must be within the compatibility range)
+      let yearMatch = true;
+      if (filter.ano) {
+        const anoInicio = compat.ano_inicio || 0;
+        const anoFim = compat.ano_fim || 9999;
+        yearMatch = filter.ano >= anoInicio && filter.ano <= anoFim;
+      }
+      
+      return marcaMatch && modeloMatch && yearMatch;
     });
 
     if (hasMatch) {

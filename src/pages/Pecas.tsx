@@ -27,14 +27,15 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Plus, Search, MoreHorizontal, Edit, Trash2, Sparkles, MapPin, Package, Download, FileSpreadsheet, Upload, Car, Eye, Copy } from "lucide-react";
+import { Plus, Search, MoreHorizontal, Edit, Trash2, Sparkles, MapPin, Package, Download, FileSpreadsheet, Upload, Car, Eye, Copy, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useParts, useCategories, useCreatePart, useUpdatePart, useDeletePart, type Part, type PartFormData } from "@/hooks/useParts";
-import { useAllPartCompatibilities, filterPartsByCompatibility } from "@/hooks/usePartsWithCompatibilities";
+import { useAllPartCompatibilities, filterPartsByAdvancedCompatibility, type AdvancedCompatibilityFilter } from "@/hooks/usePartsWithCompatibilities";
 import { PartFormDialog } from "@/components/parts/PartFormDialog";
 import { DeletePartDialog } from "@/components/parts/DeletePartDialog";
 import { PartThumbnail } from "@/components/parts/PartThumbnail";
 import { ImportPartsDialog } from "@/components/parts/ImportPartsDialog";
+import { CompatibilityFilterDialog, type CompatibilityFilter } from "@/components/parts/CompatibilityFilterDialog";
 import { exportToCSV, exportToExcel } from "@/utils/exportUtils";
 
 const statusConfig = {
@@ -54,7 +55,7 @@ const Pecas = () => {
   const navigate = useNavigate();
   
   const [searchTerm, setSearchTerm] = useState("");
-  const [compatibilitySearch, setCompatibilitySearch] = useState("");
+  const [compatibilityFilter, setCompatibilityFilter] = useState<CompatibilityFilter>({ marca: "", modelo: "", ano: null });
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [categoriaFilter, setCategoriaFilter] = useState<string>("all");
   
@@ -108,13 +109,14 @@ const Pecas = () => {
 
   // Get parts that match compatibility filter
   const compatiblePartIds = useMemo(() => {
-    if (!compatibilitySearch.trim()) return null;
-    return filterPartsByCompatibility(
+    const hasFilter = compatibilityFilter.marca || compatibilityFilter.modelo || compatibilityFilter.ano;
+    if (!hasFilter) return null;
+    return filterPartsByAdvancedCompatibility(
       parts.map(p => p.id),
       compatibilityMap,
-      compatibilitySearch
+      compatibilityFilter as AdvancedCompatibilityFilter
     );
-  }, [parts, compatibilityMap, compatibilitySearch]);
+  }, [parts, compatibilityMap, compatibilityFilter]);
 
   const filteredParts = parts.filter((part) => {
     const matchesSearch =
@@ -210,15 +212,10 @@ const Pecas = () => {
                 className="pl-9"
               />
             </div>
-            <div className="relative flex-1 min-w-[180px] max-w-xs">
-              <Car className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-              <Input
-                placeholder="Buscar por compatibilidade..."
-                value={compatibilitySearch}
-                onChange={(e) => setCompatibilitySearch(e.target.value)}
-                className="pl-9"
-              />
-            </div>
+            <CompatibilityFilterDialog
+              filter={compatibilityFilter}
+              onFilterChange={setCompatibilityFilter}
+            />
             <Select value={statusFilter} onValueChange={setStatusFilter}>
               <SelectTrigger className="w-32">
                 <SelectValue placeholder="Status" />
