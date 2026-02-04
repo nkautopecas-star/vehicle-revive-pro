@@ -41,6 +41,7 @@ import {
   MarketplaceListing,
 } from "@/hooks/useMarketplaceListings";
 import { LinkPartDialog } from "@/components/anuncios/LinkPartDialog";
+import { AnunciosPagination } from "@/components/anuncios/AnunciosPagination";
 import { formatDistanceToNow } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { Link } from "react-router-dom";
@@ -51,18 +52,33 @@ export default function Anuncios() {
   const [accountFilter, setAccountFilter] = useState("all");
   const [linkDialogOpen, setLinkDialogOpen] = useState(false);
   const [selectedListing, setSelectedListing] = useState<MarketplaceListing | null>(null);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(20);
 
   const { data: accounts, isLoading: accountsLoading } = useMarketplaceAccounts();
-  const { data: listings, isLoading, refetch, isFetching } = useMarketplaceListings({
+  const { data: paginatedResult, isLoading, refetch, isFetching } = useMarketplaceListings({
     accountId: accountFilter !== "all" ? accountFilter : undefined,
     status: statusFilter,
     search: search.length >= 2 ? search : undefined,
+    page: currentPage,
+    pageSize,
   });
   const linkMutation = useLinkListingToPart();
+
+  const listings = paginatedResult?.data || [];
 
   const handleOpenLinkDialog = (listing: MarketplaceListing) => {
     setSelectedListing(listing);
     setLinkDialogOpen(true);
+  };
+
+  const handlePageChange = (page: number) => {
+    setCurrentPage(page);
+  };
+
+  const handlePageSizeChange = (size: number) => {
+    setPageSize(size);
+    setCurrentPage(1); // Reset to first page when changing page size
   };
 
   const handleLinkPart = (partId: string | null) => {
@@ -101,10 +117,10 @@ export default function Anuncios() {
   };
 
   const stats = {
-    total: listings?.length || 0,
-    active: listings?.filter((l) => l.status === "active").length || 0,
-    paused: listings?.filter((l) => l.status === "paused").length || 0,
-    linked: listings?.filter((l) => l.part_id !== null).length || 0,
+    total: paginatedResult?.totalCount || 0,
+    active: listings.filter((l) => l.status === "active").length,
+    paused: listings.filter((l) => l.status === "paused").length,
+    linked: listings.filter((l) => l.part_id !== null).length,
   };
 
   return (
@@ -231,7 +247,7 @@ export default function Anuncios() {
               </TableHeader>
               <TableBody>
                 {isLoading ? (
-                  Array.from({ length: 10 }).map((_, i) => (
+                  Array.from({ length: pageSize }).map((_, i) => (
                     <TableRow key={i}>
                       <TableCell><Skeleton className="h-4 w-[300px]" /></TableCell>
                       <TableCell><Skeleton className="h-4 w-[80px]" /></TableCell>
@@ -241,7 +257,7 @@ export default function Anuncios() {
                       <TableCell><Skeleton className="h-4 w-[40px]" /></TableCell>
                     </TableRow>
                   ))
-                ) : listings?.length === 0 ? (
+                ) : listings.length === 0 ? (
                   <TableRow>
                     <TableCell colSpan={6} className="h-24 text-center">
                       <div className="flex flex-col items-center gap-2 text-muted-foreground">
@@ -254,7 +270,7 @@ export default function Anuncios() {
                     </TableCell>
                   </TableRow>
                 ) : (
-                  listings?.map((listing) => (
+                  listings.map((listing) => (
                     <TableRow key={listing.id}>
                       <TableCell>
                         <div className="flex flex-col">
@@ -347,12 +363,16 @@ export default function Anuncios() {
           </CardContent>
         </Card>
 
-        {/* Results count */}
-        {listings && listings.length > 0 && (
-          <p className="text-sm text-muted-foreground text-center">
-            Exibindo {listings.length} anúncios
-            {listings.length === 500 && " (limite máximo)"}
-          </p>
+        {/* Pagination */}
+        {paginatedResult && paginatedResult.totalCount > 0 && (
+          <AnunciosPagination
+            currentPage={currentPage}
+            totalPages={paginatedResult.totalPages}
+            totalCount={paginatedResult.totalCount}
+            pageSize={pageSize}
+            onPageChange={handlePageChange}
+            onPageSizeChange={handlePageSizeChange}
+          />
         )}
 
         {/* Link Part Dialog */}

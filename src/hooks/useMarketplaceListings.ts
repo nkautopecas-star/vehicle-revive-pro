@@ -29,14 +29,51 @@ interface UseMarketplaceListingsOptions {
   accountId?: string;
   status?: string;
   search?: string;
+  page?: number;
+  pageSize?: number;
+}
+
+export interface PaginatedListingsResult {
+  data: MarketplaceListing[];
+  totalCount: number;
+  page: number;
+  pageSize: number;
+  totalPages: number;
 }
 
 export function useMarketplaceListings(options: UseMarketplaceListingsOptions = {}) {
-  const { accountId, status, search } = options;
+  const { accountId, status, search, page = 1, pageSize = 20 } = options;
 
   return useQuery({
-    queryKey: ["marketplace-listings", accountId, status, search],
-    queryFn: async () => {
+    queryKey: ["marketplace-listings", accountId, status, search, page, pageSize],
+    queryFn: async (): Promise<PaginatedListingsResult> => {
+      // First, get the total count
+      let countQuery = supabase
+        .from("marketplace_listings")
+        .select("*", { count: "exact", head: true });
+
+      if (accountId) {
+        countQuery = countQuery.eq("marketplace_account_id", accountId);
+      }
+
+      if (status && status !== "all") {
+        countQuery = countQuery.eq("status", status as "active" | "paused" | "sold" | "deleted");
+      }
+
+      if (search) {
+        countQuery = countQuery.ilike("titulo", `%${search}%`);
+      }
+
+      const { count, error: countError } = await countQuery;
+      if (countError) throw countError;
+
+      const totalCount = count || 0;
+      const totalPages = Math.ceil(totalCount / pageSize);
+
+      // Then get the paginated data
+      const from = (page - 1) * pageSize;
+      const to = from + pageSize - 1;
+
       let query = supabase
         .from("marketplace_listings")
         .select(`
@@ -44,7 +81,8 @@ export function useMarketplaceListings(options: UseMarketplaceListingsOptions = 
           marketplace_account:marketplace_accounts(id, nome_conta, marketplace),
           part:parts(id, nome, codigo_interno)
         `)
-        .order("created_at", { ascending: false });
+        .order("created_at", { ascending: false })
+        .range(from, to);
 
       if (accountId) {
         query = query.eq("marketplace_account_id", accountId);
@@ -58,13 +96,17 @@ export function useMarketplaceListings(options: UseMarketplaceListingsOptions = 
         query = query.ilike("titulo", `%${search}%`);
       }
 
-      // Limit to avoid performance issues
-      query = query.limit(500);
-
       const { data, error } = await query;
 
       if (error) throw error;
-      return data as MarketplaceListing[];
+
+      return {
+        data: data as MarketplaceListing[],
+        totalCount,
+        page,
+        pageSize,
+        totalPages,
+      };
     },
   });
 }
