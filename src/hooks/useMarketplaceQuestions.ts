@@ -41,11 +41,12 @@ export function useMarketplaceQuestions(options: UseMarketplaceQuestionsOptions 
         .from("marketplace_questions")
         .select(`
           *,
-          listing:marketplace_listings(
+          listing:marketplace_listings!inner(
             id,
             titulo,
             external_id,
             preco,
+            status,
             marketplace_account:marketplace_accounts(
               id,
               nome_conta,
@@ -53,6 +54,7 @@ export function useMarketplaceQuestions(options: UseMarketplaceQuestionsOptions 
             )
           )
         `)
+        .eq("listing.status", "active")
         .order("received_at", { ascending: false });
 
       if (status && status !== "all") {
