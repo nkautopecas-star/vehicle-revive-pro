@@ -392,15 +392,21 @@ serve(async (req) => {
           const batchSize = 50;
           for (let i = 0; i < newItems.length; i += batchSize) {
             const batch = newItems.slice(i, i + batchSize);
-            const insertData = batch.map(item => ({
-              marketplace_account_id: account_id,
-              external_id: item.id,
-              titulo: item.title?.substring(0, 255) || 'Sem título',
-              preco: item.price || 0,
-              status: item.status === 'active' ? 'active' : 'paused',
-              part_id: null,
-              last_sync: new Date().toISOString(),
-            }));
+            const insertData = batch.map(item => {
+              // Get the first image URL from ML item pictures
+              const imageUrl = item.pictures?.[0]?.url || item.pictures?.[0]?.secure_url || item.thumbnail || null;
+              
+              return {
+                marketplace_account_id: account_id,
+                external_id: item.id,
+                titulo: item.title?.substring(0, 255) || 'Sem título',
+                preco: item.price || 0,
+                status: item.status === 'active' ? 'active' : 'paused',
+                part_id: null,
+                last_sync: new Date().toISOString(),
+                image_url: imageUrl,
+              };
+            });
 
             const { error: batchError } = await supabase
               .from('marketplace_listings')
@@ -428,6 +434,9 @@ serve(async (req) => {
             
             for (const item of batch) {
               try {
+                // Get the first image URL from ML item pictures
+                const imageUrl = item.pictures?.[0]?.url || item.pictures?.[0]?.secure_url || item.thumbnail || null;
+                
                 await supabase
                   .from('marketplace_listings')
                   .update({
@@ -435,6 +444,7 @@ serve(async (req) => {
                     preco: item.price || 0,
                     status: item.status === 'active' ? 'active' : 'paused',
                     last_sync: new Date().toISOString(),
+                    image_url: imageUrl,
                   })
                   .eq('external_id', item.id)
                   .eq('marketplace_account_id', account_id);

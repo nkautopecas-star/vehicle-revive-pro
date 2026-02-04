@@ -19,6 +19,7 @@ export interface MarketplaceQuestion {
     preco: number;
     status: string;
     part_id: string | null;
+    image_url: string | null;
     marketplace_account?: {
       id: string;
       nome_conta: string;
@@ -59,6 +60,7 @@ export function useMarketplaceQuestions(options: UseMarketplaceQuestionsOptions 
             preco,
             status,
             part_id,
+            image_url,
             marketplace_account:marketplace_accounts(
               id,
               nome_conta,
