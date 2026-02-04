@@ -3,6 +3,8 @@ import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { AuthProvider } from "@/contexts/AuthContext";
+import { ProtectedRoute } from "@/components/ProtectedRoute";
 import Dashboard from "./pages/Dashboard";
 import Veiculos from "./pages/Veiculos";
 import Pecas from "./pages/Pecas";
@@ -14,6 +16,7 @@ import Precificacao from "./pages/Precificacao";
 import Notas from "./pages/Notas";
 import Integracoes from "./pages/Integracoes";
 import Configuracoes from "./pages/Configuracoes";
+import Auth from "./pages/Auth";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -24,21 +27,28 @@ const App = () => (
       <Toaster />
       <Sonner />
       <BrowserRouter>
-        <Routes>
-          <Route path="/" element={<Dashboard />} />
-          <Route path="/veiculos" element={<Veiculos />} />
-          <Route path="/pecas" element={<Pecas />} />
-          <Route path="/estoque" element={<Estoque />} />
-          <Route path="/marketplaces" element={<Marketplaces />} />
-          <Route path="/perguntas" element={<Perguntas />} />
-          <Route path="/ia" element={<IA />} />
-          <Route path="/precificacao" element={<Precificacao />} />
-          <Route path="/notas" element={<Notas />} />
-          <Route path="/integracoes" element={<Integracoes />} />
-          <Route path="/configuracoes" element={<Configuracoes />} />
-          {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
-          <Route path="*" element={<NotFound />} />
-        </Routes>
+        <AuthProvider>
+          <Routes>
+            {/* Public route */}
+            <Route path="/auth" element={<Auth />} />
+
+            {/* Protected routes - All authenticated users */}
+            <Route path="/" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
+            <Route path="/veiculos" element={<ProtectedRoute><Veiculos /></ProtectedRoute>} />
+            <Route path="/pecas" element={<ProtectedRoute><Pecas /></ProtectedRoute>} />
+            <Route path="/estoque" element={<ProtectedRoute><Estoque /></ProtectedRoute>} />
+            <Route path="/marketplaces" element={<ProtectedRoute><Marketplaces /></ProtectedRoute>} />
+            <Route path="/perguntas" element={<ProtectedRoute><Perguntas /></ProtectedRoute>} />
+            <Route path="/ia" element={<ProtectedRoute><IA /></ProtectedRoute>} />
+            <Route path="/precificacao" element={<ProtectedRoute><Precificacao /></ProtectedRoute>} />
+            <Route path="/notas" element={<ProtectedRoute><Notas /></ProtectedRoute>} />
+            <Route path="/integracoes" element={<ProtectedRoute><Integracoes /></ProtectedRoute>} />
+            <Route path="/configuracoes" element={<ProtectedRoute><Configuracoes /></ProtectedRoute>} />
+
+            {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
+            <Route path="*" element={<NotFound />} />
+          </Routes>
+        </AuthProvider>
       </BrowserRouter>
     </TooltipProvider>
   </QueryClientProvider>
