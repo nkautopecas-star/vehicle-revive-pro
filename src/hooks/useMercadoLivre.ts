@@ -43,8 +43,23 @@ export function useMercadoLivre() {
       const result = await response.json();
       
       if (result.auth_url) {
-        // Redirect to Mercado Livre OAuth
-        window.location.href = result.auth_url;
+        // In preview/iframe, redirects to external domains may fail.
+        // Prefer opening in a new tab (user-initiated click) with a safe fallback.
+        const opened = window.open(result.auth_url as string, "_blank", "noopener,noreferrer");
+
+        if (!opened) {
+          toast({
+            title: "Pop-up bloqueado",
+            description: "Permita pop-ups para abrir a página de autorização do Mercado Livre.",
+            variant: "destructive",
+          });
+
+          // Fallback to same-tab navigation
+          window.location.href = result.auth_url as string;
+        }
+
+        // Keep UI responsive even if user stays on the app tab.
+        setIsConnecting(false);
       } else {
         throw new Error('No auth URL returned');
       }
