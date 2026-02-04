@@ -251,35 +251,55 @@ serve(async (req) => {
           const mlUserId = mlUser.id;
           console.log('ML User ID:', mlUserId);
 
-          // Fetch all items from ML - the API has a max offset of 1000
-          // So we need to fetch by different statuses and combine
+          // Fetch ALL items from ML using date-based pagination to bypass the 1000 offset limit
+          // Strategy: fetch items sorted by date, then use date filter to get older items
           const limit = 50;
           let allItems: any[] = [];
           const statuses = ['active', 'paused']; // Fetch active and paused listings
           
           for (const status of statuses) {
-            let offset = 0;
-            const maxOffset = 1000; // ML API limit
+            let hasMore = true;
+            let lastDateCreated: string | null = null;
+            let fetchedIds = new Set<string>(); // Track fetched IDs to avoid duplicates
             
-            while (offset < maxOffset) {
-              const endpoint = `/users/${mlUserId}/items/search?status=${status}&offset=${offset}&limit=${limit}`;
+            console.log(`Starting to fetch all ${status} items...`);
+            
+            while (hasMore) {
+              // Build endpoint with optional date filter
+              let endpoint = `/users/${mlUserId}/items/search?status=${status}&limit=${limit}&sort=date_created&order=desc`;
+              
+              // Add date filter to get items older than the last one we fetched
+              if (lastDateCreated) {
+                endpoint += `&date_created_to=${encodeURIComponent(lastDateCreated)}`;
+              }
               
               let searchResult;
               try {
                 searchResult = await mlApiCall(endpoint, accessToken);
               } catch (error) {
-                console.log(`Error fetching ${status} items at offset ${offset}:`, error);
+                console.log(`Error fetching ${status} items:`, error);
                 break;
               }
               
-              console.log(`Fetched ${searchResult.results?.length || 0} ${status} item IDs (offset: ${offset})`);
+              const results = searchResult.results || [];
+              console.log(`Fetched ${results.length} ${status} item IDs`);
               
-              if (!searchResult.results || searchResult.results.length === 0) break;
+              if (results.length === 0) {
+                hasMore = false;
+                break;
+              }
+              
+              // Filter out already fetched items (can happen at boundary)
+              const newItemIds = results.filter((id: string) => !fetchedIds.has(id));
+              
+              if (newItemIds.length === 0) {
+                hasMore = false;
+                break;
+              }
               
               // Get full item details in batches of 20
-              const itemIds = searchResult.results;
-              for (let i = 0; i < itemIds.length; i += 20) {
-                const batch = itemIds.slice(i, i + 20);
+              for (let i = 0; i < newItemIds.length; i += 20) {
+                const batch = newItemIds.slice(i, i + 20);
                 const itemsResponse = await mlApiCall(
                   `/items?ids=${batch.join(',')}`,
                   accessToken
@@ -287,16 +307,31 @@ serve(async (req) => {
                 
                 for (const itemData of itemsResponse) {
                   if (itemData.code === 200 && itemData.body) {
-                    allItems.push(itemData.body);
+                    const item = itemData.body;
+                    
+                    // Track this item to avoid duplicates
+                    fetchedIds.add(item.id);
+                    allItems.push(item);
+                    
+                    // Update lastDateCreated to the oldest item's date
+                    if (item.date_created) {
+                      if (!lastDateCreated || item.date_created < lastDateCreated) {
+                        lastDateCreated = item.date_created;
+                      }
+                    }
                   }
                 }
               }
               
-              if (searchResult.results.length < limit) break;
-              offset += limit;
+              // If we got less than the limit, we've reached the end
+              if (results.length < limit) {
+                hasMore = false;
+              }
+              
+              console.log(`Progress: ${fetchedIds.size} ${status} items fetched so far...`);
             }
             
-            console.log(`Total ${status} items so far: ${allItems.length}`);
+            console.log(`Completed ${status}: ${fetchedIds.size} items total`);
           }
 
           console.log(`Total items fetched from ML: ${allItems.length}`);
