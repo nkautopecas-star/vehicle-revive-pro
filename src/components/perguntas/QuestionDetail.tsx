@@ -1,0 +1,215 @@
+import { useState } from "react";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Textarea } from "@/components/ui/textarea";
+import { Badge } from "@/components/ui/badge";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { cn } from "@/lib/utils";
+import { Send, Sparkles, Package, MessageSquare, ExternalLink } from "lucide-react";
+import { formatDistanceToNow } from "date-fns";
+import { ptBR } from "date-fns/locale";
+import type { MarketplaceQuestion } from "@/hooks/useMarketplaceQuestions";
+import { useAnswerQuestion } from "@/hooks/useMarketplaceQuestions";
+
+const marketplaceConfig = {
+  mercadolivre: { label: "Mercado Livre", color: "bg-yellow-500/20 text-yellow-500" },
+  shopee: { label: "Shopee", color: "bg-orange-500/20 text-orange-500" },
+  olx: { label: "OLX", color: "bg-blue-500/20 text-blue-500" },
+};
+
+interface QuestionDetailProps {
+  question: MarketplaceQuestion | null;
+}
+
+export function QuestionDetail({ question }: QuestionDetailProps) {
+  const [answer, setAnswer] = useState("");
+  const answerMutation = useAnswerQuestion();
+
+  const handleSubmit = () => {
+    if (!question || !answer.trim()) return;
+
+    answerMutation.mutate(
+      {
+        questionId: question.id,
+        answer: answer.trim(),
+        externalId: question.external_id,
+      },
+      {
+        onSuccess: () => {
+          setAnswer("");
+        },
+      }
+    );
+  };
+
+  if (!question) {
+    return (
+      <Card className="flex-1 flex flex-col overflow-hidden">
+        <CardContent className="flex-1 flex items-center justify-center">
+          <div className="text-center text-muted-foreground">
+            <MessageSquare className="w-16 h-16 mx-auto mb-4 opacity-30" />
+            <p className="text-lg">Selecione uma pergunta</p>
+            <p className="text-sm">Escolha uma pergunta na lista para visualizar</p>
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  const marketplace = question.listing?.marketplace_account?.marketplace || "mercadolivre";
+  const config = marketplaceConfig[marketplace];
+  const customerInitials = question.customer_name
+    ? question.customer_name
+        .split(" ")
+        .map((n) => n[0])
+        .join("")
+        .toUpperCase()
+        .slice(0, 2)
+    : "CL";
+
+  const mlItemUrl = question.listing?.external_id
+    ? `https://www.mercadolivre.com.br/p/${question.listing.external_id}`
+    : null;
+
+  return (
+    <Card className="flex-1 flex flex-col overflow-hidden">
+      <CardHeader className="pb-3 shrink-0 border-b border-border">
+        <div className="flex items-start justify-between">
+          <div className="flex items-center gap-4">
+            <div className="flex items-center justify-center w-14 h-14 rounded-xl bg-muted text-3xl">
+              📦
+            </div>
+            <div>
+              <CardTitle className="text-lg line-clamp-1">
+                {question.listing?.titulo || "Produto não encontrado"}
+              </CardTitle>
+              <div className="flex items-center gap-2 mt-1">
+                <Badge className={config.color}>{config.label}</Badge>
+                <span className="text-sm text-muted-foreground">
+                  {formatDistanceToNow(new Date(question.received_at), {
+                    addSuffix: true,
+                    locale: ptBR,
+                  })}
+                </span>
+              </div>
+            </div>
+          </div>
+          <div className="flex gap-2">
+            {mlItemUrl && (
+              <Button
+                variant="outline"
+                size="sm"
+                className="gap-2"
+                onClick={() => window.open(mlItemUrl, "_blank")}
+              >
+                <ExternalLink className="w-4 h-4" />
+                Ver no ML
+              </Button>
+            )}
+            <Button variant="outline" size="sm" className="gap-2">
+              <Package className="w-4 h-4" />
+              Ver Produto
+            </Button>
+          </div>
+        </div>
+      </CardHeader>
+      <CardContent className="flex-1 overflow-y-auto p-6">
+        <div className="space-y-6">
+          {/* Customer Question */}
+          <div className="flex gap-3">
+            <Avatar className="w-10 h-10 shrink-0">
+              <AvatarFallback className="bg-muted">{customerInitials}</AvatarFallback>
+            </Avatar>
+            <div className="flex-1">
+              <div className="flex items-center gap-2 mb-1">
+                <span className="font-medium">{question.customer_name || "Cliente"}</span>
+                <span className="text-xs text-muted-foreground">
+                  {formatDistanceToNow(new Date(question.received_at), {
+                    addSuffix: true,
+                    locale: ptBR,
+                  })}
+                </span>
+              </div>
+              <div className="p-4 rounded-xl bg-muted/50 border border-border">
+                <p className="text-sm">{question.question}</p>
+              </div>
+            </div>
+          </div>
+
+          {/* Previous Answer if exists */}
+          {question.status === "answered" && question.answer && (
+            <div className="flex gap-3 justify-end">
+              <div className="flex-1 max-w-[80%]">
+                <div className="flex items-center gap-2 mb-1 justify-end">
+                  <span className="text-xs text-muted-foreground">
+                    {question.answered_at &&
+                      formatDistanceToNow(new Date(question.answered_at), {
+                        addSuffix: true,
+                        locale: ptBR,
+                      })}
+                  </span>
+                  <span className="font-medium">Você</span>
+                </div>
+                <div className="p-4 rounded-xl bg-primary/10 border border-primary/20">
+                  <p className="text-sm">{question.answer}</p>
+                </div>
+              </div>
+              <Avatar className="w-10 h-10 shrink-0">
+                <AvatarFallback className="bg-primary/20 text-primary">EU</AvatarFallback>
+              </Avatar>
+            </div>
+          )}
+
+          {/* AI Suggestion (only for pending questions) */}
+          {question.status === "pending" && (
+            <div className="p-4 rounded-xl bg-primary/5 border border-primary/20">
+              <div className="flex items-start gap-3">
+                <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-primary/10">
+                  <Sparkles className="w-4 h-4 text-primary" />
+                </div>
+                <div className="flex-1">
+                  <div className="flex items-center gap-2 mb-2">
+                    <span className="text-sm font-medium text-primary">Sugestão IA</span>
+                    <Badge variant="outline" className="text-xs">Em breve</Badge>
+                  </div>
+                  <p className="text-sm text-muted-foreground">
+                    A sugestão automática de respostas será disponibilizada em breve.
+                    Por enquanto, escreva sua resposta manualmente.
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      </CardContent>
+
+      {/* Answer Input - only for pending questions */}
+      {question.status === "pending" && (
+        <div className="p-4 border-t border-border shrink-0">
+          <div className="flex gap-3">
+            <Textarea
+              placeholder="Digite sua resposta..."
+              className="min-h-[80px] resize-none"
+              value={answer}
+              onChange={(e) => setAnswer(e.target.value)}
+              disabled={answerMutation.isPending}
+            />
+            <div className="flex flex-col gap-2">
+              <Button
+                size="icon"
+                className="h-10 w-10"
+                onClick={handleSubmit}
+                disabled={!answer.trim() || answerMutation.isPending}
+              >
+                <Send className="w-4 h-4" />
+              </Button>
+              <Button size="icon" variant="outline" className="h-10 w-10" disabled>
+                <Sparkles className="w-4 h-4" />
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+    </Card>
+  );
+}
