@@ -26,11 +26,12 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Plus, Search, MoreHorizontal, Package, Edit, Trash2, Sparkles, MapPin } from "lucide-react";
+import { Plus, Search, MoreHorizontal, Edit, Trash2, Sparkles, MapPin, Package } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useParts, useCategories, useCreatePart, useUpdatePart, useDeletePart, type Part, type PartFormData } from "@/hooks/useParts";
 import { PartFormDialog } from "@/components/parts/PartFormDialog";
 import { DeletePartDialog } from "@/components/parts/DeletePartDialog";
+import { PartThumbnail } from "@/components/parts/PartThumbnail";
 
 const statusConfig = {
   ativa: { label: "Ativa", className: "bg-success/20 text-success hover:bg-success/30" },
@@ -285,9 +286,12 @@ const Pecas = () => {
                   filteredParts.map((part) => (
                     <TableRow key={part.id} className="border-border hover:bg-muted/50">
                       <TableCell>
-                        <div>
-                          <p className="font-medium">{part.nome}</p>
-                          <p className="text-xs text-muted-foreground">{part.categoria_nome || "Sem categoria"}</p>
+                        <div className="flex items-center gap-3">
+                          <PartThumbnail partId={part.id} partName={part.nome} />
+                          <div>
+                            <p className="font-medium">{part.nome}</p>
+                            <p className="text-xs text-muted-foreground">{part.categoria_nome || "Sem categoria"}</p>
+                          </div>
                         </div>
                       </TableCell>
                       <TableCell>
