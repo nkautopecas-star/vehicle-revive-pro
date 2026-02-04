@@ -277,7 +277,12 @@ export function PartFormDialog({
           <PartImageUpload partId={part?.id} disabled={isLoading} />
 
           {/* Compatibilities Section */}
-          <PartCompatibilities partId={part?.id} disabled={isLoading} />
+          <PartCompatibilities 
+            partId={part?.id} 
+            partName={formData.nome || part?.nome}
+            vehicleInfo={part?.veiculo_info}
+            disabled={isLoading} 
+          />
 
           <div className="flex justify-end gap-3 mt-4">
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={isLoading}>
