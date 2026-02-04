@@ -1,34 +1,30 @@
+import { useEffect, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Switch } from "@/components/ui/switch";
 import { 
   Link2, 
   ExternalLink,
   Settings,
   CheckCircle,
   AlertCircle,
-  Zap
+  Zap,
+  Loader2
 } from "lucide-react";
+import { useMercadoLivre } from "@/hooks/useMercadoLivre";
+import { MLAccountCard } from "@/components/integrations/MLAccountCard";
+import { MLConnectCard } from "@/components/integrations/MLConnectCard";
 
-const integrations = [
-  {
-    id: "mercadolivre",
-    name: "Mercado Livre",
-    description: "API oficial para anúncios e vendas",
-    icon: "🛒",
-    connected: true,
-    accounts: 2,
-    category: "marketplace",
-  },
+const otherIntegrations = [
   {
     id: "shopee",
     name: "Shopee",
     description: "Integração completa com Shopee Sellers",
     icon: "🧡",
-    connected: true,
-    accounts: 1,
+    connected: false,
+    accounts: 0,
     category: "marketplace",
   },
   {
@@ -45,8 +41,8 @@ const integrations = [
     name: "Bling",
     description: "ERP e emissão de notas fiscais",
     icon: "📋",
-    connected: true,
-    accounts: 1,
+    connected: false,
+    accounts: 0,
     category: "erp",
   },
   {
@@ -63,8 +59,8 @@ const integrations = [
     name: "Correios",
     description: "Cálculo de frete e rastreamento",
     icon: "📬",
-    connected: true,
-    accounts: 1,
+    connected: false,
+    accounts: 0,
     category: "logistics",
   },
   {
@@ -79,30 +75,94 @@ const integrations = [
 ];
 
 const categories = {
-  marketplace: { label: "Marketplaces", description: "Plataformas de venda" },
   erp: { label: "ERP & Fiscal", description: "Gestão e notas fiscais" },
   logistics: { label: "Logística", description: "Frete e entregas" },
 };
 
 const Integracoes = () => {
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [processingCode, setProcessingCode] = useState(false);
+  
+  const { 
+    accounts: mlAccounts, 
+    isLoadingAccounts,
+    isConnecting,
+    startOAuth,
+    exchangeCode,
+    syncAll,
+    isSyncing 
+  } = useMercadoLivre();
+
+  // Handle OAuth callback
+  useEffect(() => {
+    const code = searchParams.get('code');
+    if (code && !processingCode) {
+      setProcessingCode(true);
+      exchangeCode(code)
+        .then(() => {
+          // Clear the code from URL
+          setSearchParams({});
+        })
+        .catch(() => {
+          setSearchParams({});
+        })
+        .finally(() => {
+          setProcessingCode(false);
+        });
+    }
+  }, [searchParams, exchangeCode, setSearchParams, processingCode]);
+
   const categorizedIntegrations = Object.entries(categories).map(([key, value]) => ({
     ...value,
     key,
-    items: integrations.filter((i) => i.category === key),
+    items: otherIntegrations.filter((i) => i.category === key),
   }));
 
   return (
     <AppLayout title="Integrações" description="Gerencie todas as suas integrações">
       <div className="space-y-8">
-        {categorizedIntegrations.map((category) => (
-          <div key={category.key}>
-            <div className="mb-4">
-              <h2 className="text-lg font-semibold">{category.label}</h2>
-              <p className="text-sm text-muted-foreground">{category.description}</p>
+        {/* Mercado Livre Section */}
+        <div>
+          <div className="mb-4">
+            <h2 className="text-lg font-semibold">Mercado Livre</h2>
+            <p className="text-sm text-muted-foreground">
+              Sincronize peças, preços e responda perguntas automaticamente
+            </p>
+          </div>
+          
+          {isLoadingAccounts ? (
+            <div className="flex items-center justify-center py-8">
+              <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
             </div>
+          ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {category.items.map((integration) => (
-                <Card key={integration.id} className="relative overflow-hidden">
+              {mlAccounts?.map((account) => (
+                <MLAccountCard
+                  key={account.id}
+                  account={account}
+                  onSync={syncAll}
+                  isSyncing={isSyncing}
+                />
+              ))}
+              <MLConnectCard 
+                onConnect={startOAuth} 
+                isConnecting={isConnecting || processingCode} 
+              />
+            </div>
+          )}
+        </div>
+
+        {/* Other Marketplaces */}
+        <div>
+          <div className="mb-4">
+            <h2 className="text-lg font-semibold">Outros Marketplaces</h2>
+            <p className="text-sm text-muted-foreground">Em breve</p>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {otherIntegrations
+              .filter((i) => i.category === 'marketplace')
+              .map((integration) => (
+                <Card key={integration.id} className="relative overflow-hidden opacity-60">
                   <CardContent className="py-6">
                     <div className="flex items-start justify-between mb-4">
                       <div className="flex items-center gap-3">
@@ -118,47 +178,44 @@ const Integracoes = () => {
                       </div>
                     </div>
                     <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        {integration.connected ? (
-                          <>
-                            <Badge className="bg-success/20 text-success">
-                              <CheckCircle className="w-3 h-3 mr-1" />
-                              Conectado
-                            </Badge>
-                            {integration.accounts > 0 && (
-                              <span className="text-xs text-muted-foreground">
-                                {integration.accounts} conta{integration.accounts > 1 ? "s" : ""}
-                              </span>
-                            )}
-                          </>
-                        ) : (
-                          <Badge variant="outline" className="text-muted-foreground">
-                            <AlertCircle className="w-3 h-3 mr-1" />
-                            Não conectado
-                          </Badge>
-                        )}
+                      <Badge variant="outline" className="text-muted-foreground">
+                        Em breve
+                      </Badge>
+                    </div>
+                  </CardContent>
+                </Card>
+              ))}
+          </div>
+        </div>
+
+        {/* Other Categories */}
+        {categorizedIntegrations.map((category) => (
+          <div key={category.key}>
+            <div className="mb-4">
+              <h2 className="text-lg font-semibold">{category.label}</h2>
+              <p className="text-sm text-muted-foreground">{category.description}</p>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {category.items.map((integration) => (
+                <Card key={integration.id} className="relative overflow-hidden opacity-60">
+                  <CardContent className="py-6">
+                    <div className="flex items-start justify-between mb-4">
+                      <div className="flex items-center gap-3">
+                        <div className="flex items-center justify-center w-12 h-12 rounded-xl bg-muted text-2xl">
+                          {integration.icon}
+                        </div>
+                        <div>
+                          <h3 className="font-semibold">{integration.name}</h3>
+                          <p className="text-xs text-muted-foreground line-clamp-1">
+                            {integration.description}
+                          </p>
+                        </div>
                       </div>
-                      <div className="flex gap-1">
-                        {integration.connected && (
-                          <Button variant="ghost" size="icon" className="h-8 w-8">
-                            <Settings className="w-4 h-4" />
-                          </Button>
-                        )}
-                        <Button 
-                          variant={integration.connected ? "ghost" : "default"} 
-                          size={integration.connected ? "icon" : "sm"}
-                          className={integration.connected ? "h-8 w-8" : "gap-2"}
-                        >
-                          {integration.connected ? (
-                            <ExternalLink className="w-4 h-4" />
-                          ) : (
-                            <>
-                              <Zap className="w-4 h-4" />
-                              Conectar
-                            </>
-                          )}
-                        </Button>
-                      </div>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <Badge variant="outline" className="text-muted-foreground">
+                        Em breve
+                      </Badge>
                     </div>
                   </CardContent>
                 </Card>
@@ -179,11 +236,14 @@ const Integracoes = () => {
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="text-center py-8">
-              <p className="text-muted-foreground mb-4">
-                Nenhum webhook configurado
+            <div className="p-4 rounded-lg bg-muted/50">
+              <p className="text-sm font-medium mb-2">URL do Webhook Mercado Livre:</p>
+              <code className="text-xs bg-background px-2 py-1 rounded border">
+                {import.meta.env.VITE_SUPABASE_URL}/functions/v1/ml-webhook
+              </code>
+              <p className="text-xs text-muted-foreground mt-2">
+                Configure esta URL nas notificações da sua aplicação no Portal de Desenvolvedores do Mercado Livre
               </p>
-              <Button variant="outline">Adicionar Webhook</Button>
             </div>
           </CardContent>
         </Card>
