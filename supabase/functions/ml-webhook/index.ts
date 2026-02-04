@@ -16,6 +16,12 @@ serve(async (req) => {
     return new Response('ok', { headers: corsHeaders });
   }
 
+  // Some platforms validate webhooks with HEAD requests.
+  // Return 200 so the DevCenter can save the callback URL.
+  if (req.method === 'HEAD') {
+    return new Response(null, { status: 200, headers: corsHeaders });
+  }
+
   // Webhook notifications don't require auth - they come from ML
   if (req.method === 'POST') {
     try {
@@ -214,7 +220,7 @@ serve(async (req) => {
 
   // GET request - for webhook verification
   if (req.method === 'GET') {
-    return new Response('Webhook endpoint active', { headers: corsHeaders });
+    return new Response('OK', { headers: corsHeaders });
   }
 
   return new Response('Method not allowed', { status: 405, headers: corsHeaders });
