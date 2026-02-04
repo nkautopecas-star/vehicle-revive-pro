@@ -248,55 +248,52 @@ serve(async (req) => {
       const mlUserId = mlUser.id;
       console.log('ML User ID:', mlUserId);
 
-      // Fetch all active items from ML using scroll_id for pagination (supports >1000 items)
-      const limit = 100;
+      // Fetch all items from ML - the API has a max offset of 1000
+      // So we need to fetch by different statuses and combine
+      const limit = 50;
       let allItems: any[] = [];
-      let scrollId: string | null = null;
-      let hasMore = true;
+      const statuses = ['active', 'paused']; // Fetch active and paused listings
       
-      while (hasMore) {
-        let endpoint = `/users/${mlUserId}/items/search?status=active&limit=${limit}`;
-        if (scrollId) {
-          endpoint += `&scroll_id=${scrollId}`;
-        }
+      for (const status of statuses) {
+        let offset = 0;
+        const maxOffset = 1000; // ML API limit
         
-        const searchResult = await mlApiCall(endpoint, accessToken);
-        
-        console.log(`Fetched ${searchResult.results?.length || 0} item IDs (scroll_id: ${scrollId || 'initial'})`);
-        
-        if (!searchResult.results || searchResult.results.length === 0) {
-          hasMore = false;
-          break;
-        }
-        
-        // Get full item details in batches of 20
-        const itemIds = searchResult.results;
-        for (let i = 0; i < itemIds.length; i += 20) {
-          const batch = itemIds.slice(i, i + 20);
-          const itemsResponse = await mlApiCall(
-            `/items?ids=${batch.join(',')}`,
-            accessToken
-          );
+        while (offset < maxOffset) {
+          const endpoint = `/users/${mlUserId}/items/search?status=${status}&offset=${offset}&limit=${limit}`;
           
-          for (const itemData of itemsResponse) {
-            if (itemData.code === 200 && itemData.body) {
-              allItems.push(itemData.body);
+          let searchResult;
+          try {
+            searchResult = await mlApiCall(endpoint, accessToken);
+          } catch (error) {
+            console.log(`Error fetching ${status} items at offset ${offset}:`, error);
+            break;
+          }
+          
+          console.log(`Fetched ${searchResult.results?.length || 0} ${status} item IDs (offset: ${offset})`);
+          
+          if (!searchResult.results || searchResult.results.length === 0) break;
+          
+          // Get full item details in batches of 20
+          const itemIds = searchResult.results;
+          for (let i = 0; i < itemIds.length; i += 20) {
+            const batch = itemIds.slice(i, i + 20);
+            const itemsResponse = await mlApiCall(
+              `/items?ids=${batch.join(',')}`,
+              accessToken
+            );
+            
+            for (const itemData of itemsResponse) {
+              if (itemData.code === 200 && itemData.body) {
+                allItems.push(itemData.body);
+              }
             }
           }
+          
+          if (searchResult.results.length < limit) break;
+          offset += limit;
         }
         
-        // Use scroll_id for next page if available
-        if (searchResult.scroll_id) {
-          scrollId = searchResult.scroll_id;
-        } else {
-          hasMore = false;
-        }
-        
-        // Safety limit to prevent infinite loops
-        if (allItems.length >= 10000) {
-          console.log('Reached safety limit of 10000 items');
-          hasMore = false;
-        }
+        console.log(`Total ${status} items so far: ${allItems.length}`);
       }
 
       console.log(`Total items fetched from ML: ${allItems.length}`);
