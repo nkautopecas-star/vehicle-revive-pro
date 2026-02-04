@@ -230,6 +230,12 @@ serve(async (req) => {
 
       console.log('Answering question:', question.external_id);
 
+      const requestBody = {
+        question_id: parseInt(question.external_id),
+        text: answer,
+      };
+      console.log('Request body:', JSON.stringify(requestBody));
+
       // Send answer to ML
       const answerResponse = await fetch(`${ML_API_URL}/answers`, {
         method: 'POST',
@@ -237,17 +243,17 @@ serve(async (req) => {
           Authorization: `Bearer ${accessToken}`,
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({
-          question_id: parseInt(question.external_id),
-          text: answer,
-        }),
+        body: JSON.stringify(requestBody),
       });
 
+      const responseText = await answerResponse.text();
+      console.log('ML API Response status:', answerResponse.status);
+      console.log('ML API Response body:', responseText);
+
       if (!answerResponse.ok) {
-        const errorText = await answerResponse.text();
-        console.error('Failed to answer question:', errorText);
+        console.error('Failed to answer question:', responseText);
         return new Response(
-          JSON.stringify({ error: 'Failed to send answer to ML', details: errorText }),
+          JSON.stringify({ error: 'Failed to send answer to ML', details: responseText }),
           { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
       }
