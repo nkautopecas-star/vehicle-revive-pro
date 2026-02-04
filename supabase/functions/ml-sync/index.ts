@@ -310,39 +310,50 @@ serve(async (req) => {
       let updated = 0;
       const errors: string[] = [];
 
-      for (const item of allItems) {
-        try {
-          const isNew = !existingExternalIds.has(item.id);
-          
-          if (isNew) {
-            // Import as new listing (without linking to a part initially)
-            // We'll create a placeholder that can be linked later
-            const { error: insertError } = await supabase
-              .from('marketplace_listings')
-              .insert({
-                marketplace_account_id: account_id,
-                external_id: item.id,
-                titulo: item.title,
-                preco: item.price,
-                status: item.status === 'active' ? 'active' : 'paused',
-                part_id: null, // Will be linked manually later
-                last_sync: new Date().toISOString(),
-              });
+      // Separate items into new and existing
+      const newItems = allItems.filter(item => !existingExternalIds.has(item.id));
+      const existingItems = allItems.filter(item => existingExternalIds.has(item.id));
 
-            if (insertError) {
-              // part_id is required, so we need to handle this differently
-              // For now, log and skip items without linked parts
-              console.log(`Skipping ${item.id} - needs part linking: ${item.title}`);
-            } else {
-              imported++;
-            }
-          } else {
-            // Update existing listing
+      console.log(`Processing: ${newItems.length} new, ${existingItems.length} existing`);
+
+      // Batch insert new items (50 at a time for speed)
+      const batchSize = 50;
+      for (let i = 0; i < newItems.length; i += batchSize) {
+        const batch = newItems.slice(i, i + batchSize);
+        const insertData = batch.map(item => ({
+          marketplace_account_id: account_id,
+          external_id: item.id,
+          titulo: item.title?.substring(0, 255) || 'Sem título',
+          preco: item.price || 0,
+          status: item.status === 'active' ? 'active' : 'paused',
+          part_id: null,
+          last_sync: new Date().toISOString(),
+        }));
+
+        const { error: batchError } = await supabase
+          .from('marketplace_listings')
+          .insert(insertData);
+
+        if (batchError) {
+          console.error(`Batch insert error (${i}-${i + batch.length}):`, batchError.message);
+          errors.push(`Batch ${i}: ${batchError.message}`);
+        } else {
+          imported += batch.length;
+        }
+      }
+
+      // Batch update existing items (50 at a time)
+      for (let i = 0; i < existingItems.length; i += batchSize) {
+        const batch = existingItems.slice(i, i + batchSize);
+        
+        // Update each item in the batch (Supabase doesn't support bulk update with different values)
+        for (const item of batch) {
+          try {
             await supabase
               .from('marketplace_listings')
               .update({
-                titulo: item.title,
-                preco: item.price,
+                titulo: item.title?.substring(0, 255) || 'Sem título',
+                preco: item.price || 0,
                 status: item.status === 'active' ? 'active' : 'paused',
                 last_sync: new Date().toISOString(),
               })
@@ -350,11 +361,10 @@ serve(async (req) => {
               .eq('marketplace_account_id', account_id);
             
             updated++;
+          } catch (error: unknown) {
+            const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+            errors.push(`Update ${item.id}: ${errorMessage}`);
           }
-        } catch (error: unknown) {
-          console.error('Error processing item:', item.id, error);
-          const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-          errors.push(`${item.id}: ${errorMessage}`);
         }
       }
 
