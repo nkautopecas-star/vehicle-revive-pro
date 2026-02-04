@@ -243,147 +243,156 @@ serve(async (req) => {
     if (action === 'sync_all') {
       console.log('Syncing all listings for account:', account_id);
 
-      // First, get ML user ID
-      const mlUser = await mlApiCall('/users/me', accessToken);
-      const mlUserId = mlUser.id;
-      console.log('ML User ID:', mlUserId);
+      // Define background sync task
+      async function performSync() {
+        try {
+          // First, get ML user ID
+          const mlUser = await mlApiCall('/users/me', accessToken);
+          const mlUserId = mlUser.id;
+          console.log('ML User ID:', mlUserId);
 
-      // Fetch all items from ML - the API has a max offset of 1000
-      // So we need to fetch by different statuses and combine
-      const limit = 50;
-      let allItems: any[] = [];
-      const statuses = ['active', 'paused']; // Fetch active and paused listings
-      
-      for (const status of statuses) {
-        let offset = 0;
-        const maxOffset = 1000; // ML API limit
-        
-        while (offset < maxOffset) {
-          const endpoint = `/users/${mlUserId}/items/search?status=${status}&offset=${offset}&limit=${limit}`;
+          // Fetch all items from ML - the API has a max offset of 1000
+          // So we need to fetch by different statuses and combine
+          const limit = 50;
+          let allItems: any[] = [];
+          const statuses = ['active', 'paused']; // Fetch active and paused listings
           
-          let searchResult;
-          try {
-            searchResult = await mlApiCall(endpoint, accessToken);
-          } catch (error) {
-            console.log(`Error fetching ${status} items at offset ${offset}:`, error);
-            break;
-          }
-          
-          console.log(`Fetched ${searchResult.results?.length || 0} ${status} item IDs (offset: ${offset})`);
-          
-          if (!searchResult.results || searchResult.results.length === 0) break;
-          
-          // Get full item details in batches of 20
-          const itemIds = searchResult.results;
-          for (let i = 0; i < itemIds.length; i += 20) {
-            const batch = itemIds.slice(i, i + 20);
-            const itemsResponse = await mlApiCall(
-              `/items?ids=${batch.join(',')}`,
-              accessToken
-            );
+          for (const status of statuses) {
+            let offset = 0;
+            const maxOffset = 1000; // ML API limit
             
-            for (const itemData of itemsResponse) {
-              if (itemData.code === 200 && itemData.body) {
-                allItems.push(itemData.body);
+            while (offset < maxOffset) {
+              const endpoint = `/users/${mlUserId}/items/search?status=${status}&offset=${offset}&limit=${limit}`;
+              
+              let searchResult;
+              try {
+                searchResult = await mlApiCall(endpoint, accessToken);
+              } catch (error) {
+                console.log(`Error fetching ${status} items at offset ${offset}:`, error);
+                break;
               }
+              
+              console.log(`Fetched ${searchResult.results?.length || 0} ${status} item IDs (offset: ${offset})`);
+              
+              if (!searchResult.results || searchResult.results.length === 0) break;
+              
+              // Get full item details in batches of 20
+              const itemIds = searchResult.results;
+              for (let i = 0; i < itemIds.length; i += 20) {
+                const batch = itemIds.slice(i, i + 20);
+                const itemsResponse = await mlApiCall(
+                  `/items?ids=${batch.join(',')}`,
+                  accessToken
+                );
+                
+                for (const itemData of itemsResponse) {
+                  if (itemData.code === 200 && itemData.body) {
+                    allItems.push(itemData.body);
+                  }
+                }
+              }
+              
+              if (searchResult.results.length < limit) break;
+              offset += limit;
+            }
+            
+            console.log(`Total ${status} items so far: ${allItems.length}`);
+          }
+
+          console.log(`Total items fetched from ML: ${allItems.length}`);
+
+          // Get existing listings in our database
+          const { data: existingListings } = await supabase
+            .from('marketplace_listings')
+            .select('external_id')
+            .eq('marketplace_account_id', account_id);
+
+          const existingExternalIds = new Set(existingListings?.map(l => l.external_id) || []);
+
+          let imported = 0;
+          let updated = 0;
+          const errors: string[] = [];
+
+          // Separate items into new and existing
+          const newItems = allItems.filter(item => !existingExternalIds.has(item.id));
+          const existingItems = allItems.filter(item => existingExternalIds.has(item.id));
+
+          console.log(`Processing: ${newItems.length} new, ${existingItems.length} existing`);
+
+          // Batch insert new items (50 at a time for speed)
+          const batchSize = 50;
+          for (let i = 0; i < newItems.length; i += batchSize) {
+            const batch = newItems.slice(i, i + batchSize);
+            const insertData = batch.map(item => ({
+              marketplace_account_id: account_id,
+              external_id: item.id,
+              titulo: item.title?.substring(0, 255) || 'Sem título',
+              preco: item.price || 0,
+              status: item.status === 'active' ? 'active' : 'paused',
+              part_id: null,
+              last_sync: new Date().toISOString(),
+            }));
+
+            const { error: batchError } = await supabase
+              .from('marketplace_listings')
+              .insert(insertData);
+
+            if (batchError) {
+              console.error(`Batch insert error (${i}-${i + batch.length}):`, batchError.message);
+              errors.push(`Batch ${i}: ${batchError.message}`);
+            } else {
+              imported += batch.length;
+              console.log(`Inserted batch ${i}-${i + batch.length}: ${batch.length} items`);
             }
           }
-          
-          if (searchResult.results.length < limit) break;
-          offset += limit;
-        }
-        
-        console.log(`Total ${status} items so far: ${allItems.length}`);
-      }
 
-      console.log(`Total items fetched from ML: ${allItems.length}`);
-
-      // Get existing listings in our database
-      const { data: existingListings } = await supabase
-        .from('marketplace_listings')
-        .select('external_id')
-        .eq('marketplace_account_id', account_id);
-
-      const existingExternalIds = new Set(existingListings?.map(l => l.external_id) || []);
-
-      let imported = 0;
-      let updated = 0;
-      const errors: string[] = [];
-
-      // Separate items into new and existing
-      const newItems = allItems.filter(item => !existingExternalIds.has(item.id));
-      const existingItems = allItems.filter(item => existingExternalIds.has(item.id));
-
-      console.log(`Processing: ${newItems.length} new, ${existingItems.length} existing`);
-
-      // Batch insert new items (50 at a time for speed)
-      const batchSize = 50;
-      for (let i = 0; i < newItems.length; i += batchSize) {
-        const batch = newItems.slice(i, i + batchSize);
-        const insertData = batch.map(item => ({
-          marketplace_account_id: account_id,
-          external_id: item.id,
-          titulo: item.title?.substring(0, 255) || 'Sem título',
-          preco: item.price || 0,
-          status: item.status === 'active' ? 'active' : 'paused',
-          part_id: null,
-          last_sync: new Date().toISOString(),
-        }));
-
-        const { error: batchError } = await supabase
-          .from('marketplace_listings')
-          .insert(insertData);
-
-        if (batchError) {
-          console.error(`Batch insert error (${i}-${i + batch.length}):`, batchError.message);
-          errors.push(`Batch ${i}: ${batchError.message}`);
-        } else {
-          imported += batch.length;
-        }
-      }
-
-      // Batch update existing items (50 at a time)
-      for (let i = 0; i < existingItems.length; i += batchSize) {
-        const batch = existingItems.slice(i, i + batchSize);
-        
-        // Update each item in the batch (Supabase doesn't support bulk update with different values)
-        for (const item of batch) {
-          try {
-            await supabase
-              .from('marketplace_listings')
-              .update({
-                titulo: item.title?.substring(0, 255) || 'Sem título',
-                preco: item.price || 0,
-                status: item.status === 'active' ? 'active' : 'paused',
-                last_sync: new Date().toISOString(),
-              })
-              .eq('external_id', item.id)
-              .eq('marketplace_account_id', account_id);
+          // Batch update existing items (50 at a time)
+          for (let i = 0; i < existingItems.length; i += batchSize) {
+            const batch = existingItems.slice(i, i + batchSize);
             
-            updated++;
-          } catch (error: unknown) {
-            const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-            errors.push(`Update ${item.id}: ${errorMessage}`);
+            // Update each item in the batch (Supabase doesn't support bulk update with different values)
+            for (const item of batch) {
+              try {
+                await supabase
+                  .from('marketplace_listings')
+                  .update({
+                    titulo: item.title?.substring(0, 255) || 'Sem título',
+                    preco: item.price || 0,
+                    status: item.status === 'active' ? 'active' : 'paused',
+                    last_sync: new Date().toISOString(),
+                  })
+                  .eq('external_id', item.id)
+                  .eq('marketplace_account_id', account_id);
+                
+                updated++;
+              } catch (error: unknown) {
+                const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+                errors.push(`Update ${item.id}: ${errorMessage}`);
+              }
+            }
+            console.log(`Updated batch ${i}-${i + batch.length}`);
           }
+
+          console.log(`Sync complete: ${imported} imported, ${updated} updated, ${errors.length} errors`);
+
+          // Update account last sync time
+          await supabase
+            .from('marketplace_accounts')
+            .update({ updated_at: new Date().toISOString() })
+            .eq('id', account_id);
+
+        } catch (error) {
+          console.error('Background sync error:', error);
         }
       }
 
-      console.log(`Import complete: ${imported} new, ${updated} updated, ${errors.length} errors`);
-
-      // Update account last sync time
-      await supabase
-        .from('marketplace_accounts')
-        .update({ updated_at: new Date().toISOString() })
-        .eq('id', account_id);
+      // Start background task and return immediately
+      (globalThis as any).EdgeRuntime.waitUntil(performSync());
 
       return new Response(
         JSON.stringify({ 
           success: true, 
-          synced: imported + updated,
-          imported,
-          updated, 
-          total: allItems.length, 
-          errors 
+          message: 'Sincronização iniciada em segundo plano. Os anúncios serão importados nos próximos minutos.'
         }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
