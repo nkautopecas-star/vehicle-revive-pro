@@ -166,7 +166,7 @@ const Pecas = () => {
               <Sparkles className="w-4 h-4" />
               Gerar com IA
             </Button>
-            <Button className="gap-2" onClick={() => setIsFormDialogOpen(true)}>
+            <Button className="gap-2" onClick={() => { setEditingPart(null); setIsFormDialogOpen(true); }}>
               <Plus className="w-4 h-4" />
               Nova Peça
             </Button>
