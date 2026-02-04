@@ -442,6 +442,56 @@ export type Database = {
           },
         ]
       }
+      sync_jobs: {
+        Row: {
+          completed_at: string | null
+          created_at: string
+          error_message: string | null
+          id: string
+          imported_items: number | null
+          marketplace_account_id: string
+          processed_items: number | null
+          started_at: string | null
+          status: string
+          total_items: number | null
+          updated_items: number | null
+        }
+        Insert: {
+          completed_at?: string | null
+          created_at?: string
+          error_message?: string | null
+          id?: string
+          imported_items?: number | null
+          marketplace_account_id: string
+          processed_items?: number | null
+          started_at?: string | null
+          status?: string
+          total_items?: number | null
+          updated_items?: number | null
+        }
+        Update: {
+          completed_at?: string | null
+          created_at?: string
+          error_message?: string | null
+          id?: string
+          imported_items?: number | null
+          marketplace_account_id?: string
+          processed_items?: number | null
+          started_at?: string | null
+          status?: string
+          total_items?: number | null
+          updated_items?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "sync_jobs_marketplace_account_id_fkey"
+            columns: ["marketplace_account_id"]
+            isOneToOne: false
+            referencedRelation: "marketplace_accounts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       user_roles: {
         Row: {
           created_at: string
