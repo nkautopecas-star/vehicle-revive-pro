@@ -197,7 +197,18 @@ function AISuggestionsDialog({
 }: AISuggestionsDialogProps) {
   const [selected, setSelected] = useState<Set<number>>(new Set());
 
-  const toggleSelection = (index: number) => {
+  // Reset selection when dialog opens with new suggestions
+  const handleOpenChange = (newOpen: boolean) => {
+    if (!newOpen) {
+      setSelected(new Set());
+    }
+    onOpenChange(newOpen);
+  };
+
+  const toggleSelection = (index: number, e?: React.MouseEvent) => {
+    if (e) {
+      e.stopPropagation();
+    }
     setSelected((prev) => {
       const newSet = new Set(prev);
       if (newSet.has(index)) {
@@ -222,7 +233,7 @@ function AISuggestionsDialog({
   };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent className="max-w-md">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
@@ -242,11 +253,12 @@ function AISuggestionsDialog({
                   ? "border-primary bg-primary/10"
                   : "border-border hover:bg-muted/50"
               }`}
-              onClick={() => toggleSelection(index)}
+              onClick={(e) => toggleSelection(index, e)}
             >
               <Checkbox
                 checked={selected.has(index)}
                 onCheckedChange={() => toggleSelection(index)}
+                onClick={(e) => e.stopPropagation()}
               />
               <div className="flex-1">
                 <span className="font-medium">
@@ -286,7 +298,7 @@ function AISuggestionsDialog({
             <Button
               type="button"
               variant="outline"
-              onClick={() => onOpenChange(false)}
+              onClick={() => handleOpenChange(false)}
               disabled={isAdding}
             >
               Cancelar
