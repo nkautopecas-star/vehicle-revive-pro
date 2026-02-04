@@ -28,6 +28,7 @@ interface PartFormDialogProps {
   part?: Part | null;
   onSubmit: (data: PartFormData) => void;
   isLoading?: boolean;
+  isDuplicating?: boolean;
 }
 
 export function PartFormDialog({ 
@@ -35,7 +36,8 @@ export function PartFormDialog({
   onOpenChange, 
   part, 
   onSubmit, 
-  isLoading 
+  isLoading,
+  isDuplicating = false
 }: PartFormDialogProps) {
   const { data: categories = [] } = useCategories();
   const { data: vehicles = [] } = useVehiclesForSelect();
@@ -97,15 +99,21 @@ export function PartFormDialog({
     onSubmit(formData);
   };
 
+  const isEditing = part && !isDuplicating;
+  const dialogTitle = isDuplicating ? "Duplicar Peça" : (part ? "Editar Peça" : "Cadastrar Peça");
+  const dialogDescription = isDuplicating 
+    ? "Crie uma nova peça baseada nos dados existentes. Ajuste os campos conforme necessário."
+    : (part 
+        ? "Atualize os dados da peça."
+        : "Preencha os dados da peça para adicionar ao estoque.");
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>{part ? "Editar Peça" : "Cadastrar Peça"}</DialogTitle>
+          <DialogTitle>{dialogTitle}</DialogTitle>
           <DialogDescription>
-            {part 
-              ? "Atualize os dados da peça."
-              : "Preencha os dados da peça para adicionar ao estoque."}
+            {dialogDescription}
           </DialogDescription>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="grid gap-4 py-4">
@@ -244,7 +252,7 @@ export function PartFormDialog({
               </SelectContent>
             </Select>
           </div>
-          {part && (
+          {isEditing && (
             <div className="space-y-2">
               <Label htmlFor="status">Status</Label>
               <Select 
@@ -273,16 +281,18 @@ export function PartFormDialog({
             />
           </div>
           
-          {/* Image Upload Section */}
-          <PartImageUpload partId={part?.id} disabled={isLoading} />
+          {/* Image Upload Section - only for existing parts */}
+          {isEditing && <PartImageUpload partId={part?.id} disabled={isLoading} />}
 
-          {/* Compatibilities Section */}
-          <PartCompatibilities 
-            partId={part?.id} 
-            partName={formData.nome || part?.nome}
-            vehicleInfo={part?.veiculo_info}
-            disabled={isLoading} 
-          />
+          {/* Compatibilities Section - only for existing parts */}
+          {isEditing && (
+            <PartCompatibilities 
+              partId={part?.id} 
+              partName={formData.nome || part?.nome}
+              vehicleInfo={part?.veiculo_info}
+              disabled={isLoading} 
+            />
+          )}
 
           <div className="flex justify-end gap-3 mt-4">
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={isLoading}>
@@ -290,7 +300,7 @@ export function PartFormDialog({
             </Button>
             <Button type="submit" disabled={isLoading || !formData.nome}>
               {isLoading && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
-              {part ? "Salvar Alterações" : "Cadastrar Peça"}
+              {isDuplicating ? "Criar Cópia" : (isEditing ? "Salvar Alterações" : "Cadastrar Peça")}
             </Button>
           </div>
         </form>

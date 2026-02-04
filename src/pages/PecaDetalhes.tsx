@@ -24,7 +24,8 @@ import {
   TrendingUp,
   TrendingDown,
   Edit,
-  RefreshCw
+  RefreshCw,
+  Copy
 } from "lucide-react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -123,12 +124,20 @@ const PecaDetalhes = () => {
               Voltar
             </Link>
           </Button>
-          <Button asChild>
-            <Link to={`/pecas?edit=${part.id}`}>
-              <Edit className="w-4 h-4 mr-2" />
-              Editar Peça
-            </Link>
-          </Button>
+          <div className="flex gap-2">
+            <Button variant="outline" asChild>
+              <Link to={`/pecas?duplicate=${part.id}`}>
+                <Copy className="w-4 h-4 mr-2" />
+                Duplicar
+              </Link>
+            </Button>
+            <Button asChild>
+              <Link to={`/pecas?edit=${part.id}`}>
+                <Edit className="w-4 h-4 mr-2" />
+                Editar Peça
+              </Link>
+            </Button>
+          </div>
         </div>
 
         {/* Main Info */}

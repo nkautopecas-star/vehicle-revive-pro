@@ -1,5 +1,5 @@
-import { useState, useMemo } from "react";
-import { Link } from "react-router-dom";
+import { useState, useMemo, useEffect } from "react";
+import { Link, useSearchParams, useNavigate } from "react-router-dom";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -27,7 +27,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Plus, Search, MoreHorizontal, Edit, Trash2, Sparkles, MapPin, Package, Download, FileSpreadsheet, Upload, Car, Eye } from "lucide-react";
+import { Plus, Search, MoreHorizontal, Edit, Trash2, Sparkles, MapPin, Package, Download, FileSpreadsheet, Upload, Car, Eye, Copy } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useParts, useCategories, useCreatePart, useUpdatePart, useDeletePart, type Part, type PartFormData } from "@/hooks/useParts";
 import { useAllPartCompatibilities, filterPartsByCompatibility } from "@/hooks/usePartsWithCompatibilities";
@@ -50,6 +50,9 @@ const condicaoConfig = {
 };
 
 const Pecas = () => {
+  const [searchParams, setSearchParams] = useSearchParams();
+  const navigate = useNavigate();
+  
   const [searchTerm, setSearchTerm] = useState("");
   const [compatibilitySearch, setCompatibilitySearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
@@ -57,6 +60,7 @@ const Pecas = () => {
   
   const [isFormDialogOpen, setIsFormDialogOpen] = useState(false);
   const [editingPart, setEditingPart] = useState<Part | null>(null);
+  const [duplicatingPart, setDuplicatingPart] = useState<Part | null>(null);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [partToDelete, setPartToDelete] = useState<Part | null>(null);
   const [isImportDialogOpen, setIsImportDialogOpen] = useState(false);
@@ -67,6 +71,40 @@ const Pecas = () => {
   const createMutation = useCreatePart();
   const updateMutation = useUpdatePart();
   const deleteMutation = useDeletePart();
+
+  // Handle edit/duplicate from URL params
+  useEffect(() => {
+    const editId = searchParams.get('edit');
+    const duplicateId = searchParams.get('duplicate');
+    
+    if (editId && parts.length > 0) {
+      const partToEdit = parts.find(p => p.id === editId);
+      if (partToEdit) {
+        setEditingPart(partToEdit);
+        setDuplicatingPart(null);
+        setIsFormDialogOpen(true);
+        // Clear the URL param
+        setSearchParams({}, { replace: true });
+      }
+    } else if (duplicateId && parts.length > 0) {
+      const partToDuplicate = parts.find(p => p.id === duplicateId);
+      if (partToDuplicate) {
+        // Create a copy with modified name and reset quantity
+        const duplicatedPart: Part = {
+          ...partToDuplicate,
+          id: '', // Will be assigned on creation
+          nome: `${partToDuplicate.nome} (Cópia)`,
+          quantidade: 1,
+          codigo_interno: partToDuplicate.codigo_interno ? `${partToDuplicate.codigo_interno}-COPIA` : '',
+        };
+        setDuplicatingPart(duplicatedPart);
+        setEditingPart(null);
+        setIsFormDialogOpen(true);
+        // Clear the URL param
+        setSearchParams({}, { replace: true });
+      }
+    }
+  }, [searchParams, parts, setSearchParams]);
 
   // Get parts that match compatibility filter
   const compatiblePartIds = useMemo(() => {
@@ -104,6 +142,20 @@ const Pecas = () => {
 
   const handleEditPart = (part: Part) => {
     setEditingPart(part);
+    setDuplicatingPart(null);
+    setIsFormDialogOpen(true);
+  };
+
+  const handleDuplicatePart = (part: Part) => {
+    const duplicatedPart: Part = {
+      ...part,
+      id: '',
+      nome: `${part.nome} (Cópia)`,
+      quantidade: 1,
+      codigo_interno: part.codigo_interno ? `${part.codigo_interno}-COPIA` : '',
+    };
+    setDuplicatingPart(duplicatedPart);
+    setEditingPart(null);
     setIsFormDialogOpen(true);
   };
 
@@ -136,8 +188,12 @@ const Pecas = () => {
     setIsFormDialogOpen(open);
     if (!open) {
       setEditingPart(null);
+      setDuplicatingPart(null);
     }
   };
+
+  // Determine which part data to use for the form
+  const formPart = editingPart || duplicatingPart;
 
   return (
     <AppLayout title="Peças" description="Gerencie o catálogo de peças do seu estoque">
@@ -406,6 +462,10 @@ const Pecas = () => {
                               <Edit className="w-4 h-4" />
                               Editar
                             </DropdownMenuItem>
+                            <DropdownMenuItem className="gap-2" onClick={() => handleDuplicatePart(part)}>
+                              <Copy className="w-4 h-4" />
+                              Duplicar
+                            </DropdownMenuItem>
                             <DropdownMenuItem 
                               className="gap-2 text-destructive focus:text-destructive"
                               onClick={() => handleDeleteClick(part)}
@@ -429,9 +489,10 @@ const Pecas = () => {
       <PartFormDialog
         open={isFormDialogOpen}
         onOpenChange={handleDialogClose}
-        part={editingPart}
+        part={formPart}
         onSubmit={editingPart ? handleUpdatePart : handleCreatePart}
         isLoading={createMutation.isPending || updateMutation.isPending}
+        isDuplicating={!!duplicatingPart}
       />
 
       {/* Delete Confirmation Dialog */}
