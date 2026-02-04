@@ -42,10 +42,11 @@ interface UseMarketplaceQuestionsOptions {
   status?: "pending" | "answered" | "all";
   search?: string;
   accountId?: string;
+  listingStatus?: "active" | "all";
 }
 
 export function useMarketplaceQuestions(options: UseMarketplaceQuestionsOptions = {}) {
-  const { status, search, accountId } = options;
+  const { status, search, accountId, listingStatus = "active" } = options;
   const queryClient = useQueryClient();
 
   // Subscribe to realtime updates
@@ -81,7 +82,7 @@ export function useMarketplaceQuestions(options: UseMarketplaceQuestionsOptions 
   }, [queryClient]);
 
   return useQuery({
-    queryKey: ["marketplace-questions", status, search, accountId],
+    queryKey: ["marketplace-questions", status, search, accountId, listingStatus],
     queryFn: async (): Promise<MarketplaceQuestion[]> => {
       let query = supabase
         .from("marketplace_questions")
@@ -111,8 +112,12 @@ export function useMarketplaceQuestions(options: UseMarketplaceQuestionsOptions 
             )
           )
         `)
-        .eq("listing.status", "active")
         .order("received_at", { ascending: false });
+
+      // Filter by listing status if not "all"
+      if (listingStatus === "active") {
+        query = query.eq("listing.status", "active");
+      }
 
       if (status && status !== "all") {
         query = query.eq("status", status);
