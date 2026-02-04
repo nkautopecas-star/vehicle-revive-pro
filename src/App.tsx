@@ -16,6 +16,7 @@ import Precificacao from "./pages/Precificacao";
 import Notas from "./pages/Notas";
 import Integracoes from "./pages/Integracoes";
 import Configuracoes from "./pages/Configuracoes";
+import Usuarios from "./pages/Usuarios";
 import Auth from "./pages/Auth";
 import NotFound from "./pages/NotFound";
 
@@ -43,6 +44,7 @@ const App = () => (
             <Route path="/precificacao" element={<ProtectedRoute><Precificacao /></ProtectedRoute>} />
             <Route path="/notas" element={<ProtectedRoute><Notas /></ProtectedRoute>} />
             <Route path="/integracoes" element={<ProtectedRoute><Integracoes /></ProtectedRoute>} />
+            <Route path="/usuarios" element={<ProtectedRoute requiredRoles={['admin']}><Usuarios /></ProtectedRoute>} />
             <Route path="/configuracoes" element={<ProtectedRoute><Configuracoes /></ProtectedRoute>} />
 
             {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
