@@ -19,6 +19,7 @@ import {
 } from "@/components/ui/select";
 import { useCategories, useVehiclesForSelect, type Part, type PartFormData } from "@/hooks/useParts";
 import { Loader2 } from "lucide-react";
+import { PartImageUpload } from "./PartImageUpload";
 
 interface PartFormDialogProps {
   open: boolean;
@@ -270,6 +271,9 @@ export function PartFormDialog({
               onChange={(e) => setFormData({ ...formData, observacoes: e.target.value })}
             />
           </div>
+          
+          {/* Image Upload Section */}
+          <PartImageUpload partId={part?.id} disabled={isLoading} />
           <div className="flex justify-end gap-3 mt-4">
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={isLoading}>
               Cancelar
