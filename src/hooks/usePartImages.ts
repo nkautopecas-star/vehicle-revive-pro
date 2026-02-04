@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+import { compressImage } from "@/utils/imageCompression";
 
 export interface PartImage {
   id: string;
@@ -42,13 +43,16 @@ export function useUploadPartImage() {
 
   return useMutation({
     mutationFn: async ({ partId, file }: { partId: string; file: File }) => {
+      // Compress image before upload
+      const compressedFile = await compressImage(file);
+      
       const fileExt = file.name.split('.').pop();
       const fileName = `${partId}/${Date.now()}.${fileExt}`;
 
-      // Upload file to storage
+      // Upload compressed file to storage
       const { error: uploadError } = await supabase.storage
         .from('part-images')
-        .upload(fileName, file);
+        .upload(fileName, compressedFile);
 
       if (uploadError) {
         throw uploadError;
@@ -66,14 +70,14 @@ export function useUploadPartImage() {
         ? (existingImages[0].order_position ?? 0) + 1
         : 0;
 
-      // Create database record
+      // Create database record with compressed file size
       const { error: dbError } = await supabase
         .from('part_images')
         .insert({
           part_id: partId,
           file_path: fileName,
           file_name: file.name,
-          file_size: file.size,
+          file_size: compressedFile.size,
           order_position: nextPosition,
         });
 
