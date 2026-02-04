@@ -9,7 +9,7 @@ export function usePartFirstImage(partId: string) {
         .from('part_images')
         .select('file_path')
         .eq('part_id', partId)
-        .order('created_at', { ascending: true })
+        .order('order_position', { ascending: true })
         .limit(1)
         .maybeSingle();
 
