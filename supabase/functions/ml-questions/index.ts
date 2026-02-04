@@ -82,61 +82,102 @@ serve(async (req) => {
 
       console.log(`Found ${questionsData.questions.length} unanswered questions`);
 
+      let savedCount = 0;
+
       // Process and save questions
       for (const q of questionsData.questions) {
-        // Get item details to find our listing
-        const itemResponse = await fetch(`${ML_API_URL}/items/${q.item_id}`, {
-          headers: { Authorization: `Bearer ${accessToken}` },
-        });
-        const item = await itemResponse.json();
+        try {
+          // Get item details
+          const itemResponse = await fetch(`${ML_API_URL}/items/${q.item_id}`, {
+            headers: { Authorization: `Bearer ${accessToken}` },
+          });
+          const item = await itemResponse.json();
 
-        // Find our listing
-        const { data: listing } = await supabase
-          .from('marketplace_listings')
-          .select('id')
-          .eq('external_id', q.item_id)
-          .single();
+          // Find or create listing
+          let { data: listing } = await supabase
+            .from('marketplace_listings')
+            .select('id')
+            .eq('external_id', q.item_id)
+            .single();
 
-        if (!listing) {
-          console.log('Listing not found for item:', q.item_id);
-          continue;
-        }
-
-        // Check if question already exists
-        const { data: existingQuestion } = await supabase
-          .from('marketplace_questions')
-          .select('id')
-          .eq('external_id', q.id.toString())
-          .single();
-
-        if (!existingQuestion) {
-          // Get customer name if available
-          let customerName = 'Usuário ML';
-          if (q.from?.id) {
-            try {
-              const buyerResponse = await fetch(`${ML_API_URL}/users/${q.from.id}`, {
-                headers: { Authorization: `Bearer ${accessToken}` },
-              });
-              const buyer = await buyerResponse.json();
-              customerName = buyer.nickname || 'Usuário ML';
-            } catch (e) {
-              console.log('Could not fetch buyer info');
+          // If listing doesn't exist, create it
+          if (!listing) {
+            console.log('Creating listing for item:', q.item_id);
+            
+            // Determine status from ML item status
+            let status = 'active';
+            if (item.status === 'paused' || item.status === 'under_review') {
+              status = 'paused';
+            } else if (item.status === 'closed') {
+              status = 'sold';
             }
+
+            const { data: newListing, error: createError } = await supabase
+              .from('marketplace_listings')
+              .insert({
+                external_id: q.item_id,
+                titulo: item.title || 'Produto sem título',
+                preco: item.price || 0,
+                status,
+                marketplace_account_id: account_id,
+                last_sync: new Date().toISOString(),
+              })
+              .select('id')
+              .single();
+
+            if (createError) {
+              console.error('Failed to create listing:', createError);
+              continue;
+            }
+
+            listing = newListing;
+            console.log('Created listing:', listing.id);
           }
 
-          // Insert question
-          await supabase
+          // Check if question already exists
+          const { data: existingQuestion } = await supabase
             .from('marketplace_questions')
-            .insert({
-              listing_id: listing.id,
-              external_id: q.id.toString(),
-              question: q.text,
-              customer_name: customerName,
-              status: 'pending',
-              received_at: q.date_created,
-            });
+            .select('id')
+            .eq('external_id', q.id.toString())
+            .single();
 
-          console.log('Saved new question:', q.id);
+          if (!existingQuestion) {
+            // Get customer name if available
+            let customerName = 'Usuário ML';
+            if (q.from?.id) {
+              try {
+                const buyerResponse = await fetch(`${ML_API_URL}/users/${q.from.id}`, {
+                  headers: { Authorization: `Bearer ${accessToken}` },
+                });
+                const buyer = await buyerResponse.json();
+                customerName = buyer.nickname || 'Usuário ML';
+              } catch (e) {
+                console.log('Could not fetch buyer info');
+              }
+            }
+
+            // Insert question
+            const { error: insertError } = await supabase
+              .from('marketplace_questions')
+              .insert({
+                listing_id: listing.id,
+                external_id: q.id.toString(),
+                question: q.text,
+                customer_name: customerName,
+                status: 'pending',
+                received_at: q.date_created,
+              });
+
+            if (insertError) {
+              console.error('Failed to insert question:', insertError);
+              continue;
+            }
+
+            savedCount++;
+            console.log('Saved new question:', q.id);
+          }
+        } catch (err) {
+          console.error('Error processing question:', q.id, err);
         }
       }
 
@@ -144,6 +185,7 @@ serve(async (req) => {
         JSON.stringify({ 
           success: true, 
           fetched: questionsData.questions.length,
+          saved: savedCount,
           total: questionsData.total 
         }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
