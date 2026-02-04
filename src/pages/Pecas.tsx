@@ -26,12 +26,13 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Plus, Search, MoreHorizontal, Edit, Trash2, Sparkles, MapPin, Package } from "lucide-react";
+import { Plus, Search, MoreHorizontal, Edit, Trash2, Sparkles, MapPin, Package, Download, FileSpreadsheet } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useParts, useCategories, useCreatePart, useUpdatePart, useDeletePart, type Part, type PartFormData } from "@/hooks/useParts";
 import { PartFormDialog } from "@/components/parts/PartFormDialog";
 import { DeletePartDialog } from "@/components/parts/DeletePartDialog";
 import { PartThumbnail } from "@/components/parts/PartThumbnail";
+import { exportToCSV, exportToExcel } from "@/utils/exportUtils";
 
 const statusConfig = {
   ativa: { label: "Ativa", className: "bg-success/20 text-success hover:bg-success/30" },
@@ -163,6 +164,30 @@ const Pecas = () => {
           </div>
 
           <div className="flex gap-2">
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" className="gap-2">
+                  <Download className="w-4 h-4" />
+                  Exportar
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem 
+                  className="gap-2"
+                  onClick={() => exportToCSV(filteredParts)}
+                >
+                  <Download className="w-4 h-4" />
+                  Exportar CSV
+                </DropdownMenuItem>
+                <DropdownMenuItem 
+                  className="gap-2"
+                  onClick={() => exportToExcel(filteredParts)}
+                >
+                  <FileSpreadsheet className="w-4 h-4" />
+                  Exportar Excel
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
             <Button variant="outline" className="gap-2">
               <Sparkles className="w-4 h-4" />
               Gerar com IA
