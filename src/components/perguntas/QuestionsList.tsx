@@ -26,6 +26,7 @@ interface QuestionsListProps {
   onSearchChange: (query: string) => void;
   showActiveOnly: boolean;
   onShowActiveOnlyChange: (value: boolean) => void;
+  showPendingBadge?: boolean;
 }
 
 export function QuestionsList({
@@ -38,6 +39,7 @@ export function QuestionsList({
   onSearchChange,
   showActiveOnly,
   onShowActiveOnlyChange,
+  showPendingBadge = true,
 }: QuestionsListProps) {
   return (
     <Card className="flex-1 flex flex-col overflow-hidden">
@@ -46,7 +48,7 @@ export function QuestionsList({
           <CardTitle className="text-lg flex items-center gap-2">
             <MessageSquare className="w-5 h-5" />
             Perguntas
-            {pendingCount > 0 && (
+            {showPendingBadge && pendingCount > 0 && (
               <Badge className="bg-primary text-primary-foreground">
                 {pendingCount} pendentes
               </Badge>
