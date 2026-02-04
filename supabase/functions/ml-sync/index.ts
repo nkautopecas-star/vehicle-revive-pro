@@ -243,32 +243,64 @@ serve(async (req) => {
     if (action === 'sync_all') {
       console.log('Syncing all listings for account:', account_id);
 
+      // Create a sync job to track progress
+      const { data: syncJob, error: syncJobError } = await supabase
+        .from('sync_jobs')
+        .insert({
+          marketplace_account_id: account_id,
+          status: 'pending',
+          total_items: 0,
+          processed_items: 0,
+          imported_items: 0,
+          updated_items: 0,
+        })
+        .select()
+        .single();
+
+      if (syncJobError) {
+        console.error('Failed to create sync job:', syncJobError);
+        return new Response(
+          JSON.stringify({ error: 'Failed to create sync job' }),
+          { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      const jobId = syncJob.id;
+
+      // Helper to update job progress
+      async function updateJobProgress(updates: Record<string, any>) {
+        await supabase
+          .from('sync_jobs')
+          .update(updates)
+          .eq('id', jobId);
+      }
+
       // Define background sync task
       async function performSync() {
         try {
+          // Mark job as running
+          await updateJobProgress({ status: 'running' });
+
           // First, get ML user ID
           const mlUser = await mlApiCall('/users/me', accessToken);
           const mlUserId = mlUser.id;
           console.log('ML User ID:', mlUserId);
 
           // Fetch ALL items from ML using date-based pagination to bypass the 1000 offset limit
-          // Strategy: fetch items sorted by date, then use date filter to get older items
           const limit = 50;
           let allItems: any[] = [];
-          const statuses = ['active', 'paused']; // Fetch active and paused listings
+          const statuses = ['active', 'paused'];
           
           for (const status of statuses) {
             let hasMore = true;
             let lastDateCreated: string | null = null;
-            let fetchedIds = new Set<string>(); // Track fetched IDs to avoid duplicates
+            let fetchedIds = new Set<string>();
             
             console.log(`Starting to fetch all ${status} items...`);
             
             while (hasMore) {
-              // Build endpoint with optional date filter
               let endpoint = `/users/${mlUserId}/items/search?status=${status}&limit=${limit}&sort=date_created&order=desc`;
               
-              // Add date filter to get items older than the last one we fetched
               if (lastDateCreated) {
                 endpoint += `&date_created_to=${encodeURIComponent(lastDateCreated)}`;
               }
@@ -289,7 +321,6 @@ serve(async (req) => {
                 break;
               }
               
-              // Filter out already fetched items (can happen at boundary)
               const newItemIds = results.filter((id: string) => !fetchedIds.has(id));
               
               if (newItemIds.length === 0) {
@@ -297,7 +328,6 @@ serve(async (req) => {
                 break;
               }
               
-              // Get full item details in batches of 20
               for (let i = 0; i < newItemIds.length; i += 20) {
                 const batch = newItemIds.slice(i, i + 20);
                 const itemsResponse = await mlApiCall(
@@ -308,12 +338,9 @@ serve(async (req) => {
                 for (const itemData of itemsResponse) {
                   if (itemData.code === 200 && itemData.body) {
                     const item = itemData.body;
-                    
-                    // Track this item to avoid duplicates
                     fetchedIds.add(item.id);
                     allItems.push(item);
                     
-                    // Update lastDateCreated to the oldest item's date
                     if (item.date_created) {
                       if (!lastDateCreated || item.date_created < lastDateCreated) {
                         lastDateCreated = item.date_created;
@@ -323,11 +350,12 @@ serve(async (req) => {
                 }
               }
               
-              // If we got less than the limit, we've reached the end
               if (results.length < limit) {
                 hasMore = false;
               }
               
+              // Update job with total items found so far
+              await updateJobProgress({ total_items: allItems.length });
               console.log(`Progress: ${fetchedIds.size} ${status} items fetched so far...`);
             }
             
@@ -335,6 +363,9 @@ serve(async (req) => {
           }
 
           console.log(`Total items fetched from ML: ${allItems.length}`);
+          
+          // Update total items
+          await updateJobProgress({ total_items: allItems.length });
 
           // Get existing listings in our database
           const { data: existingListings } = await supabase
@@ -346,15 +377,15 @@ serve(async (req) => {
 
           let imported = 0;
           let updated = 0;
+          let processed = 0;
           const errors: string[] = [];
 
-          // Separate items into new and existing
           const newItems = allItems.filter(item => !existingExternalIds.has(item.id));
           const existingItems = allItems.filter(item => existingExternalIds.has(item.id));
 
           console.log(`Processing: ${newItems.length} new, ${existingItems.length} existing`);
 
-          // Batch insert new items (50 at a time for speed)
+          // Batch insert new items
           const batchSize = 50;
           for (let i = 0; i < newItems.length; i += batchSize) {
             const batch = newItems.slice(i, i + batchSize);
@@ -377,15 +408,21 @@ serve(async (req) => {
               errors.push(`Batch ${i}: ${batchError.message}`);
             } else {
               imported += batch.length;
-              console.log(`Inserted batch ${i}-${i + batch.length}: ${batch.length} items`);
             }
+            
+            processed += batch.length;
+            await updateJobProgress({ 
+              processed_items: processed, 
+              imported_items: imported 
+            });
+            
+            console.log(`Inserted batch ${i}-${i + batch.length}: ${batch.length} items`);
           }
 
-          // Batch update existing items (50 at a time)
+          // Batch update existing items
           for (let i = 0; i < existingItems.length; i += batchSize) {
             const batch = existingItems.slice(i, i + batchSize);
             
-            // Update each item in the batch (Supabase doesn't support bulk update with different values)
             for (const item of batch) {
               try {
                 await supabase
@@ -405,10 +442,23 @@ serve(async (req) => {
                 errors.push(`Update ${item.id}: ${errorMessage}`);
               }
             }
+            
+            processed += batch.length;
+            await updateJobProgress({ 
+              processed_items: processed, 
+              updated_items: updated 
+            });
+            
             console.log(`Updated batch ${i}-${i + batch.length}`);
           }
 
           console.log(`Sync complete: ${imported} imported, ${updated} updated, ${errors.length} errors`);
+
+          // Mark job as completed
+          await updateJobProgress({ 
+            status: 'completed',
+            completed_at: new Date().toISOString(),
+          });
 
           // Update account last sync time
           await supabase
@@ -418,6 +468,12 @@ serve(async (req) => {
 
         } catch (error) {
           console.error('Background sync error:', error);
+          const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+          await updateJobProgress({ 
+            status: 'error',
+            error_message: errorMessage,
+            completed_at: new Date().toISOString(),
+          });
         }
       }
 
@@ -427,7 +483,8 @@ serve(async (req) => {
       return new Response(
         JSON.stringify({ 
           success: true, 
-          message: 'Sincronização iniciada em segundo plano. Os anúncios serão importados nos próximos minutos.'
+          job_id: jobId,
+          message: 'Sincronização iniciada em segundo plano.'
         }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
