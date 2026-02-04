@@ -13,6 +13,7 @@ export interface MarketplaceListing {
   updated_at: string;
   part_id: string | null;
   marketplace_account_id: string;
+  image_url: string | null;
   marketplace_account?: {
     id: string;
     nome_conta: string;

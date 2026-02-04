@@ -33,7 +33,9 @@ import {
   RefreshCw,
   ShoppingBag,
   Link2,
+  ImageIcon,
 } from "lucide-react";
+import { AspectRatio } from "@/components/ui/aspect-ratio";
 import {
   useMarketplaceListings,
   useMarketplaceAccounts,
@@ -243,7 +245,8 @@ export default function Anuncios() {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead className="w-[400px]">Título</TableHead>
+                  <TableHead className="w-[60px]">Foto</TableHead>
+                  <TableHead className="w-[350px]">Título</TableHead>
                   <TableHead>Preço</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead>Peça Vinculada</TableHead>
@@ -255,7 +258,8 @@ export default function Anuncios() {
                 {isLoading ? (
                   Array.from({ length: pageSize }).map((_, i) => (
                     <TableRow key={i}>
-                      <TableCell><Skeleton className="h-4 w-[300px]" /></TableCell>
+                      <TableCell><Skeleton className="h-10 w-10 rounded" /></TableCell>
+                      <TableCell><Skeleton className="h-4 w-[250px]" /></TableCell>
                       <TableCell><Skeleton className="h-4 w-[80px]" /></TableCell>
                       <TableCell><Skeleton className="h-4 w-[60px]" /></TableCell>
                       <TableCell><Skeleton className="h-4 w-[120px]" /></TableCell>
@@ -265,7 +269,7 @@ export default function Anuncios() {
                   ))
                 ) : listings.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={6} className="h-24 text-center">
+                    <TableCell colSpan={7} className="h-24 text-center">
                       <div className="flex flex-col items-center gap-2 text-muted-foreground">
                         <ShoppingBag className="h-8 w-8" />
                         <p>Nenhum anúncio encontrado</p>
@@ -278,6 +282,21 @@ export default function Anuncios() {
                 ) : (
                   listings.map((listing) => (
                     <TableRow key={listing.id}>
+                      <TableCell>
+                        <div className="w-10 h-10 rounded overflow-hidden bg-muted flex items-center justify-center">
+                          {listing.image_url ? (
+                            <AspectRatio ratio={1}>
+                              <img
+                                src={listing.image_url}
+                                alt={listing.titulo}
+                                className="w-full h-full object-cover"
+                              />
+                            </AspectRatio>
+                          ) : (
+                            <ImageIcon className="h-4 w-4 text-muted-foreground" />
+                          )}
+                        </div>
+                      </TableCell>
                       <TableCell>
                         <div className="flex flex-col">
                           <span className="font-medium line-clamp-1">
