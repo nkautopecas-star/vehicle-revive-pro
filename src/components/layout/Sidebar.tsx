@@ -16,15 +16,18 @@ import {
   Warehouse,
   Link2,
   LogOut,
+  Users,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { useAuth } from "@/contexts/AuthContext";
 
 interface NavItem {
   label: string;
   href: string;
   icon: React.ElementType;
   badge?: string;
+  adminOnly?: boolean;
 }
 
 const navItems: NavItem[] = [
@@ -38,12 +41,17 @@ const navItems: NavItem[] = [
   { label: "Precificação", href: "/precificacao", icon: Calculator },
   { label: "Notas Fiscais", href: "/notas", icon: FileText },
   { label: "Integrações", href: "/integracoes", icon: Link2 },
+  { label: "Usuários", href: "/usuarios", icon: Users, adminOnly: true },
   { label: "Configurações", href: "/configuracoes", icon: Settings },
 ];
 
 export function Sidebar() {
   const [collapsed, setCollapsed] = useState(false);
   const location = useLocation();
+  const { hasRole } = useAuth();
+  
+  const isAdmin = hasRole('admin');
+  const filteredNavItems = navItems.filter(item => !item.adminOnly || isAdmin);
 
   return (
     <aside
@@ -70,7 +78,7 @@ export function Sidebar() {
       {/* Navigation */}
       <nav className="flex-1 overflow-y-auto py-4 px-2">
         <ul className="space-y-1">
-          {navItems.map((item) => {
+          {filteredNavItems.map((item) => {
             const isActive = location.pathname === item.href;
             const Icon = item.icon;
 
