@@ -22,7 +22,7 @@ export function usePartImages(partId: string | undefined) {
         .from('part_images')
         .select('*')
         .eq('part_id', partId)
-        .order('created_at', { ascending: true });
+        .order('order_position', { ascending: true });
 
       if (error) {
         throw error;
@@ -54,6 +54,18 @@ export function useUploadPartImage() {
         throw uploadError;
       }
 
+      // Get current max order_position
+      const { data: existingImages } = await supabase
+        .from('part_images')
+        .select('order_position')
+        .eq('part_id', partId)
+        .order('order_position', { ascending: false })
+        .limit(1);
+
+      const nextPosition = existingImages && existingImages.length > 0
+        ? (existingImages[0].order_position ?? 0) + 1
+        : 0;
+
       // Create database record
       const { error: dbError } = await supabase
         .from('part_images')
@@ -62,6 +74,7 @@ export function useUploadPartImage() {
           file_path: fileName,
           file_name: file.name,
           file_size: file.size,
+          order_position: nextPosition,
         });
 
       if (dbError) {
