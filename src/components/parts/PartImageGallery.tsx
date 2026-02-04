@@ -45,6 +45,8 @@ export function PartImageGallery({ partId, partName }: PartImageGalleryProps) {
   const [lightboxOpen, setLightboxOpen] = useState(false);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [dragOver, setDragOver] = useState(false);
+  const [isZoomed, setIsZoomed] = useState(false);
+  const [zoomPosition, setZoomPosition] = useState({ x: 50, y: 50 });
 
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -106,6 +108,19 @@ export function PartImageGallery({ partId, partName }: PartImageGalleryProps) {
 
   const goToNext = () => {
     setCurrentIndex((prev) => (prev === images.length - 1 ? 0 : prev + 1));
+  };
+
+  const handleImageMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (!isZoomed) return;
+    const rect = e.currentTarget.getBoundingClientRect();
+    const x = ((e.clientX - rect.left) / rect.width) * 100;
+    const y = ((e.clientY - rect.top) / rect.height) * 100;
+    setZoomPosition({ x, y });
+  };
+
+  const handleImageClick = () => {
+    setIsZoomed(!isZoomed);
+    setZoomPosition({ x: 50, y: 50 });
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -260,13 +275,40 @@ export function PartImageGallery({ partId, partName }: PartImageGalleryProps) {
               </>
             )}
 
-            {/* Main image */}
+            {/* Main image with zoom */}
             {images[currentIndex] && (
-              <img
-                src={images[currentIndex].url}
-                alt={`${partName} - Foto ${currentIndex + 1}`}
-                className="max-h-[70vh] max-w-full object-contain"
-              />
+              <div
+                className={cn(
+                  "relative overflow-hidden rounded-lg cursor-zoom-in transition-all duration-200",
+                  isZoomed && "cursor-zoom-out"
+                )}
+                onMouseMove={handleImageMouseMove}
+                onMouseLeave={() => {
+                  if (isZoomed) {
+                    setIsZoomed(false);
+                    setZoomPosition({ x: 50, y: 50 });
+                  }
+                }}
+                onClick={handleImageClick}
+              >
+                <img
+                  src={images[currentIndex].url}
+                  alt={`${partName} - Foto ${currentIndex + 1}`}
+                  className={cn(
+                    "max-h-[70vh] max-w-full object-contain transition-transform duration-200",
+                    isZoomed && "scale-[2.5]"
+                  )}
+                  style={isZoomed ? {
+                    transformOrigin: `${zoomPosition.x}% ${zoomPosition.y}%`
+                  } : undefined}
+                  draggable={false}
+                />
+                {!isZoomed && (
+                  <div className="absolute bottom-4 left-1/2 -translate-x-1/2 bg-black/60 text-white/80 text-xs px-3 py-1 rounded-full pointer-events-none">
+                    Clique para ampliar
+                  </div>
+                )}
+              </div>
             )}
 
             {/* Image counter and delete */}
