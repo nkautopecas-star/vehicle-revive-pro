@@ -29,17 +29,14 @@ export function useMercadoLivre() {
   const startOAuth = async () => {
     setIsConnecting(true);
     try {
-      const { data, error } = await supabase.functions.invoke('ml-oauth', {
-        body: {},
-        headers: {},
-      });
-
-      // Use query params for get_auth_url
+      // Get auth URL from edge function
       const response = await fetch(
         `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/ml-oauth?action=get_auth_url&redirect_uri=${encodeURIComponent(REDIRECT_URI)}`
       );
 
       if (!response.ok) {
+        const errorText = await response.text();
+        console.error('Failed to get auth URL:', errorText);
         throw new Error('Failed to get auth URL');
       }
 
