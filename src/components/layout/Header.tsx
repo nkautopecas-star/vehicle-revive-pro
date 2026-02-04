@@ -18,9 +18,8 @@ interface HeaderProps {
   description?: string;
 }
 
-const roleLabels = {
+const roleLabels: Record<string, { label: string; className: string }> = {
   admin: { label: 'Admin', className: 'bg-destructive/20 text-destructive' },
-  operador: { label: 'Operador', className: 'bg-info/20 text-info' },
   vendedor: { label: 'Vendedor', className: 'bg-success/20 text-success' },
 };
 
