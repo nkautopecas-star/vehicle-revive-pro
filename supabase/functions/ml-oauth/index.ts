@@ -24,7 +24,20 @@ serve(async (req) => {
 
   try {
     const url = new URL(req.url);
-    const action = url.searchParams.get('action');
+    let action = url.searchParams.get('action');
+    
+    // For POST requests, also check the body for action
+    let body: Record<string, unknown> = {};
+    if (req.method === 'POST') {
+      try {
+        body = await req.json();
+        if (!action && body.action) {
+          action = body.action as string;
+        }
+      } catch {
+        // Body might be empty for some requests
+      }
+    }
 
     // Get authorization URL for OAuth flow
     if (action === 'get_auth_url') {
@@ -72,8 +85,7 @@ serve(async (req) => {
       }
 
       const userId = claimsData.user.id;
-      const body = await req.json();
-      const { code, redirect_uri } = body;
+      const { code, redirect_uri } = body as { code?: string; redirect_uri?: string };
 
       if (!code || !redirect_uri) {
         return new Response(
@@ -200,8 +212,7 @@ serve(async (req) => {
       }
 
       const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
-      const body = await req.json();
-      const { account_id } = body;
+      const { account_id } = body as { account_id?: string };
 
       // Get account refresh token
       const { data: account, error: accountError } = await supabase
