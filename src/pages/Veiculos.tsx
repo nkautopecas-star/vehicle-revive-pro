@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Skeleton } from "@/components/ui/skeleton";
 import {
   Table,
   TableBody,
@@ -19,114 +20,21 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from "@/components/ui/dialog";
-import { Label } from "@/components/ui/label";
-import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Textarea } from "@/components/ui/textarea";
-import { Plus, Search, MoreHorizontal, Car, Package, Eye, Edit, Trash2 } from "lucide-react";
+import { Plus, Search, MoreHorizontal, Car, Package, Eye, Edit, Trash2, AlertCircle } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useVehicles, Vehicle, VehicleStatus } from "@/hooks/useVehicles";
+import { VehicleFormDialog } from "@/components/vehicles/VehicleFormDialog";
+import { DeleteVehicleDialog } from "@/components/vehicles/DeleteVehicleDialog";
+import { useAuth } from "@/contexts/AuthContext";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 
-interface Vehicle {
-  id: string;
-  placa: string;
-  chassi: string;
-  marca: string;
-  modelo: string;
-  ano: number;
-  motorizacao: string;
-  combustivel: string;
-  cor: string;
-  dataEntrada: string;
-  status: "ativo" | "desmontando" | "desmontado" | "finalizado";
-  pecasCount: number;
-}
-
-const mockVehicles: Vehicle[] = [
-  {
-    id: "1",
-    placa: "ABC-1234",
-    chassi: "9BWZZZ377VT004251",
-    marca: "Honda",
-    modelo: "Civic",
-    ano: 2019,
-    motorizacao: "2.0",
-    combustivel: "Flex",
-    cor: "Preto",
-    dataEntrada: "2024-01-15",
-    status: "ativo",
-    pecasCount: 45,
-  },
-  {
-    id: "2",
-    placa: "XYZ-5678",
-    chassi: "9BWZZZ377VT004252",
-    marca: "Toyota",
-    modelo: "Corolla",
-    ano: 2020,
-    motorizacao: "2.0",
-    combustivel: "Flex",
-    cor: "Branco",
-    dataEntrada: "2024-01-20",
-    status: "desmontando",
-    pecasCount: 28,
-  },
-  {
-    id: "3",
-    placa: "DEF-9012",
-    chassi: "9BWZZZ377VT004253",
-    marca: "Volkswagen",
-    modelo: "Polo",
-    ano: 2021,
-    motorizacao: "1.0 TSI",
-    combustivel: "Flex",
-    cor: "Prata",
-    dataEntrada: "2024-02-01",
-    status: "desmontado",
-    pecasCount: 62,
-  },
-  {
-    id: "4",
-    placa: "GHI-3456",
-    chassi: "9BWZZZ377VT004254",
-    marca: "Fiat",
-    modelo: "Argo",
-    ano: 2020,
-    motorizacao: "1.3",
-    combustivel: "Flex",
-    cor: "Vermelho",
-    dataEntrada: "2024-02-10",
-    status: "finalizado",
-    pecasCount: 0,
-  },
-  {
-    id: "5",
-    placa: "JKL-7890",
-    chassi: "9BWZZZ377VT004255",
-    marca: "Chevrolet",
-    modelo: "Onix",
-    ano: 2019,
-    motorizacao: "1.0",
-    combustivel: "Flex",
-    cor: "Cinza",
-    dataEntrada: "2024-02-15",
-    status: "ativo",
-    pecasCount: 38,
-  },
-];
-
-const statusConfig = {
+const statusConfig: Record<VehicleStatus, { label: string; className: string }> = {
   ativo: { label: "Ativo", className: "bg-success/20 text-success hover:bg-success/30" },
   desmontando: { label: "Desmontando", className: "bg-info/20 text-info hover:bg-info/30" },
   desmontado: { label: "Desmontado", className: "bg-warning/20 text-warning hover:bg-warning/30" },
@@ -134,19 +42,62 @@ const statusConfig = {
 };
 
 const Veiculos = () => {
+  const { hasAnyRole, hasRole } = useAuth();
+  const { data: vehicles = [], isLoading, error } = useVehicles();
+
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
-  const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [isFormOpen, setIsFormOpen] = useState(false);
+  const [isDeleteOpen, setIsDeleteOpen] = useState(false);
+  const [selectedVehicle, setSelectedVehicle] = useState<Vehicle | null>(null);
 
-  const filteredVehicles = mockVehicles.filter((vehicle) => {
+  const canEdit = hasAnyRole(['admin', 'operador']);
+  const canDelete = hasRole('admin');
+
+  const filteredVehicles = vehicles.filter((vehicle) => {
     const matchesSearch =
       vehicle.placa.toLowerCase().includes(searchTerm.toLowerCase()) ||
       vehicle.modelo.toLowerCase().includes(searchTerm.toLowerCase()) ||
       vehicle.marca.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      vehicle.chassi.toLowerCase().includes(searchTerm.toLowerCase());
+      (vehicle.chassi?.toLowerCase().includes(searchTerm.toLowerCase()) ?? false);
     const matchesStatus = statusFilter === "all" || vehicle.status === statusFilter;
     return matchesSearch && matchesStatus;
   });
+
+  const stats = {
+    ativo: vehicles.filter((v) => v.status === "ativo").length,
+    desmontando: vehicles.filter((v) => v.status === "desmontando").length,
+    desmontado: vehicles.filter((v) => v.status === "desmontado").length,
+    totalParts: vehicles.reduce((acc, v) => acc + (v.parts_count || 0), 0),
+  };
+
+  const handleEdit = (vehicle: Vehicle) => {
+    setSelectedVehicle(vehicle);
+    setIsFormOpen(true);
+  };
+
+  const handleDelete = (vehicle: Vehicle) => {
+    setSelectedVehicle(vehicle);
+    setIsDeleteOpen(true);
+  };
+
+  const handleNewVehicle = () => {
+    setSelectedVehicle(null);
+    setIsFormOpen(true);
+  };
+
+  if (error) {
+    return (
+      <AppLayout title="Veículos" description="Gerencie os veículos do seu estoque">
+        <Alert variant="destructive">
+          <AlertCircle className="h-4 w-4" />
+          <AlertDescription>
+            Erro ao carregar veículos. Por favor, tente novamente.
+          </AlertDescription>
+        </Alert>
+      </AppLayout>
+    );
+  }
 
   return (
     <AppLayout title="Veículos" description="Gerencie os veículos do seu estoque">
@@ -177,90 +128,12 @@ const Veiculos = () => {
             </Select>
           </div>
 
-          <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-            <DialogTrigger asChild>
-              <Button className="gap-2 shrink-0">
-                <Plus className="w-4 h-4" />
-                Novo Veículo
-              </Button>
-            </DialogTrigger>
-            <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-              <DialogHeader>
-                <DialogTitle>Cadastrar Veículo</DialogTitle>
-                <DialogDescription>
-                  Preencha os dados do veículo para adicionar ao estoque.
-                </DialogDescription>
-              </DialogHeader>
-              <form className="grid gap-4 py-4">
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="placa">Placa</Label>
-                    <Input id="placa" placeholder="ABC-1234" />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="chassi">Chassi</Label>
-                    <Input id="chassi" placeholder="9BWZZZ377VT004251" />
-                  </div>
-                </div>
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="marca">Marca</Label>
-                    <Input id="marca" placeholder="Honda" />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="modelo">Modelo</Label>
-                    <Input id="modelo" placeholder="Civic" />
-                  </div>
-                </div>
-                <div className="grid grid-cols-3 gap-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="ano">Ano</Label>
-                    <Input id="ano" type="number" placeholder="2019" />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="motorizacao">Motorização</Label>
-                    <Input id="motorizacao" placeholder="2.0" />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="combustivel">Combustível</Label>
-                    <Select>
-                      <SelectTrigger id="combustivel">
-                        <SelectValue placeholder="Selecione" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="flex">Flex</SelectItem>
-                        <SelectItem value="gasolina">Gasolina</SelectItem>
-                        <SelectItem value="etanol">Etanol</SelectItem>
-                        <SelectItem value="diesel">Diesel</SelectItem>
-                        <SelectItem value="eletrico">Elétrico</SelectItem>
-                        <SelectItem value="hibrido">Híbrido</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="cor">Cor</Label>
-                    <Input id="cor" placeholder="Preto" />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="dataEntrada">Data de Entrada</Label>
-                    <Input id="dataEntrada" type="date" />
-                  </div>
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="observacoes">Observações</Label>
-                  <Textarea id="observacoes" placeholder="Observações sobre o veículo..." rows={3} />
-                </div>
-                <div className="flex justify-end gap-3 mt-4">
-                  <Button type="button" variant="outline" onClick={() => setIsDialogOpen(false)}>
-                    Cancelar
-                  </Button>
-                  <Button type="submit">Salvar Veículo</Button>
-                </div>
-              </form>
-            </DialogContent>
-          </Dialog>
+          {canEdit && (
+            <Button className="gap-2 shrink-0" onClick={handleNewVehicle}>
+              <Plus className="w-4 h-4" />
+              Novo Veículo
+            </Button>
+          )}
         </div>
 
         {/* Stats Cards */}
@@ -271,9 +144,11 @@ const Veiculos = () => {
                 <Car className="w-5 h-5 text-success" />
               </div>
               <div>
-                <p className="text-2xl font-bold">
-                  {mockVehicles.filter((v) => v.status === "ativo").length}
-                </p>
+                {isLoading ? (
+                  <Skeleton className="h-8 w-8" />
+                ) : (
+                  <p className="text-2xl font-bold">{stats.ativo}</p>
+                )}
                 <p className="text-xs text-muted-foreground">Ativos</p>
               </div>
             </div>
@@ -284,9 +159,11 @@ const Veiculos = () => {
                 <Car className="w-5 h-5 text-info" />
               </div>
               <div>
-                <p className="text-2xl font-bold">
-                  {mockVehicles.filter((v) => v.status === "desmontando").length}
-                </p>
+                {isLoading ? (
+                  <Skeleton className="h-8 w-8" />
+                ) : (
+                  <p className="text-2xl font-bold">{stats.desmontando}</p>
+                )}
                 <p className="text-xs text-muted-foreground">Desmontando</p>
               </div>
             </div>
@@ -297,9 +174,11 @@ const Veiculos = () => {
                 <Car className="w-5 h-5 text-warning" />
               </div>
               <div>
-                <p className="text-2xl font-bold">
-                  {mockVehicles.filter((v) => v.status === "desmontado").length}
-                </p>
+                {isLoading ? (
+                  <Skeleton className="h-8 w-8" />
+                ) : (
+                  <p className="text-2xl font-bold">{stats.desmontado}</p>
+                )}
                 <p className="text-xs text-muted-foreground">Desmontados</p>
               </div>
             </div>
@@ -310,9 +189,11 @@ const Veiculos = () => {
                 <Package className="w-5 h-5 text-primary" />
               </div>
               <div>
-                <p className="text-2xl font-bold">
-                  {mockVehicles.reduce((acc, v) => acc + v.pecasCount, 0)}
-                </p>
+                {isLoading ? (
+                  <Skeleton className="h-8 w-8" />
+                ) : (
+                  <p className="text-2xl font-bold">{stats.totalParts}</p>
+                )}
                 <p className="text-xs text-muted-foreground">Total de Peças</p>
               </div>
             </div>
@@ -336,62 +217,111 @@ const Veiculos = () => {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {filteredVehicles.map((vehicle) => (
-                  <TableRow key={vehicle.id} className="border-border hover:bg-muted/50">
-                    <TableCell className="font-mono font-medium">{vehicle.placa}</TableCell>
-                    <TableCell>
-                      <div>
-                        <p className="font-medium">{vehicle.marca} {vehicle.modelo}</p>
-                        <p className="text-xs text-muted-foreground">{vehicle.motorizacao} - {vehicle.combustivel}</p>
-                      </div>
-                    </TableCell>
-                    <TableCell>{vehicle.ano}</TableCell>
-                    <TableCell>{vehicle.cor}</TableCell>
-                    <TableCell className="text-muted-foreground">
-                      {new Date(vehicle.dataEntrada).toLocaleDateString("pt-BR")}
-                    </TableCell>
-                    <TableCell>
-                      <span className="font-medium">{vehicle.pecasCount}</span>
-                    </TableCell>
-                    <TableCell>
-                      <Badge className={cn("font-medium", statusConfig[vehicle.status].className)}>
-                        {statusConfig[vehicle.status].label}
-                      </Badge>
-                    </TableCell>
-                    <TableCell>
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button variant="ghost" size="icon" className="h-8 w-8">
-                            <MoreHorizontal className="w-4 h-4" />
-                          </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end">
-                          <DropdownMenuItem className="gap-2">
-                            <Eye className="w-4 h-4" />
-                            Ver detalhes
-                          </DropdownMenuItem>
-                          <DropdownMenuItem className="gap-2">
-                            <Package className="w-4 h-4" />
-                            Ver peças
-                          </DropdownMenuItem>
-                          <DropdownMenuItem className="gap-2">
-                            <Edit className="w-4 h-4" />
-                            Editar
-                          </DropdownMenuItem>
-                          <DropdownMenuItem className="gap-2 text-destructive focus:text-destructive">
-                            <Trash2 className="w-4 h-4" />
-                            Excluir
-                          </DropdownMenuItem>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
+                {isLoading ? (
+                  Array.from({ length: 5 }).map((_, i) => (
+                    <TableRow key={i} className="border-border">
+                      <TableCell><Skeleton className="h-4 w-20" /></TableCell>
+                      <TableCell><Skeleton className="h-8 w-32" /></TableCell>
+                      <TableCell><Skeleton className="h-4 w-12" /></TableCell>
+                      <TableCell><Skeleton className="h-4 w-16" /></TableCell>
+                      <TableCell><Skeleton className="h-4 w-20" /></TableCell>
+                      <TableCell><Skeleton className="h-4 w-8" /></TableCell>
+                      <TableCell><Skeleton className="h-6 w-24" /></TableCell>
+                      <TableCell><Skeleton className="h-8 w-8" /></TableCell>
+                    </TableRow>
+                  ))
+                ) : filteredVehicles.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={8} className="text-center py-12 text-muted-foreground">
+                      {searchTerm || statusFilter !== "all" 
+                        ? "Nenhum veículo encontrado com os filtros aplicados."
+                        : "Nenhum veículo cadastrado. Clique em 'Novo Veículo' para começar."}
                     </TableCell>
                   </TableRow>
-                ))}
+                ) : (
+                  filteredVehicles.map((vehicle) => (
+                    <TableRow key={vehicle.id} className="border-border hover:bg-muted/50">
+                      <TableCell className="font-mono font-medium">{vehicle.placa}</TableCell>
+                      <TableCell>
+                        <div>
+                          <p className="font-medium">{vehicle.marca} {vehicle.modelo}</p>
+                          <p className="text-xs text-muted-foreground">
+                            {vehicle.motorizacao || "-"} - {vehicle.combustivel || "-"}
+                          </p>
+                        </div>
+                      </TableCell>
+                      <TableCell>{vehicle.ano}</TableCell>
+                      <TableCell>{vehicle.cor || "-"}</TableCell>
+                      <TableCell className="text-muted-foreground">
+                        {new Date(vehicle.data_entrada).toLocaleDateString("pt-BR")}
+                      </TableCell>
+                      <TableCell>
+                        <span className="font-medium">{vehicle.parts_count || 0}</span>
+                      </TableCell>
+                      <TableCell>
+                        <Badge className={cn("font-medium", statusConfig[vehicle.status].className)}>
+                          {statusConfig[vehicle.status].label}
+                        </Badge>
+                      </TableCell>
+                      <TableCell>
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button variant="ghost" size="icon" className="h-8 w-8">
+                              <MoreHorizontal className="w-4 h-4" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            <DropdownMenuItem className="gap-2">
+                              <Eye className="w-4 h-4" />
+                              Ver detalhes
+                            </DropdownMenuItem>
+                            <DropdownMenuItem className="gap-2">
+                              <Package className="w-4 h-4" />
+                              Ver peças
+                            </DropdownMenuItem>
+                            {canEdit && (
+                              <DropdownMenuItem 
+                                className="gap-2" 
+                                onClick={() => handleEdit(vehicle)}
+                              >
+                                <Edit className="w-4 h-4" />
+                                Editar
+                              </DropdownMenuItem>
+                            )}
+                            {canDelete && (
+                              <DropdownMenuItem 
+                                className="gap-2 text-destructive focus:text-destructive"
+                                onClick={() => handleDelete(vehicle)}
+                              >
+                                <Trash2 className="w-4 h-4" />
+                                Excluir
+                              </DropdownMenuItem>
+                            )}
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      </TableCell>
+                    </TableRow>
+                  ))
+                )}
               </TableBody>
             </Table>
           </CardContent>
         </Card>
       </div>
+
+      {/* Form Dialog */}
+      <VehicleFormDialog
+        open={isFormOpen}
+        onOpenChange={setIsFormOpen}
+        vehicle={selectedVehicle}
+      />
+
+      {/* Delete Dialog */}
+      <DeleteVehicleDialog
+        open={isDeleteOpen}
+        onOpenChange={setIsDeleteOpen}
+        vehicle={selectedVehicle}
+      />
     </AppLayout>
   );
 };
