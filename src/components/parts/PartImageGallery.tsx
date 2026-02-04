@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useCallback } from "react";
 import {
   DndContext,
   closestCenter,
@@ -16,6 +16,7 @@ import {
 } from "@dnd-kit/sortable";
 import { usePartImages, useUploadPartImage, useDeletePartImage, type PartImage } from "@/hooks/usePartImages";
 import { useReorderPartImages } from "@/hooks/useReorderPartImages";
+import { usePinchZoom } from "@/hooks/usePinchZoom";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -45,8 +46,18 @@ export function PartImageGallery({ partId, partName }: PartImageGalleryProps) {
   const [lightboxOpen, setLightboxOpen] = useState(false);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [dragOver, setDragOver] = useState(false);
-  const [isZoomed, setIsZoomed] = useState(false);
-  const [zoomPosition, setZoomPosition] = useState({ x: 50, y: 50 });
+  
+  const {
+    scale: zoomScale,
+    position: zoomPosition,
+    isZoomed,
+    handleTouchStart,
+    handleTouchMove,
+    handleTouchEnd,
+    reset: resetZoom,
+    toggleZoom,
+    updatePosition,
+  } = usePinchZoom(1, 4);
 
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -110,18 +121,17 @@ export function PartImageGallery({ partId, partName }: PartImageGalleryProps) {
     setCurrentIndex((prev) => (prev === images.length - 1 ? 0 : prev + 1));
   };
 
-  const handleImageMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
+  const handleImageMouseMove = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
     if (!isZoomed) return;
     const rect = e.currentTarget.getBoundingClientRect();
     const x = ((e.clientX - rect.left) / rect.width) * 100;
     const y = ((e.clientY - rect.top) / rect.height) * 100;
-    setZoomPosition({ x, y });
-  };
+    updatePosition(x, y);
+  }, [isZoomed, updatePosition]);
 
-  const handleImageClick = () => {
-    setIsZoomed(!isZoomed);
-    setZoomPosition({ x: 50, y: 50 });
-  };
+  const handleImageClick = useCallback(() => {
+    toggleZoom();
+  }, [toggleZoom]);
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'ArrowLeft') goToPrevious();
@@ -275,37 +285,40 @@ export function PartImageGallery({ partId, partName }: PartImageGalleryProps) {
               </>
             )}
 
-            {/* Main image with zoom */}
+            {/* Main image with zoom and pinch support */}
             {images[currentIndex] && (
               <div
                 className={cn(
-                  "relative overflow-hidden rounded-lg cursor-zoom-in transition-all duration-200",
+                  "relative overflow-hidden rounded-lg cursor-zoom-in transition-all duration-200 touch-none",
                   isZoomed && "cursor-zoom-out"
                 )}
                 onMouseMove={handleImageMouseMove}
                 onMouseLeave={() => {
                   if (isZoomed) {
-                    setIsZoomed(false);
-                    setZoomPosition({ x: 50, y: 50 });
+                    resetZoom();
                   }
                 }}
                 onClick={handleImageClick}
+                onTouchStart={handleTouchStart}
+                onTouchMove={handleTouchMove}
+                onTouchEnd={handleTouchEnd}
               >
                 <img
                   src={images[currentIndex].url}
                   alt={`${partName} - Foto ${currentIndex + 1}`}
                   className={cn(
                     "max-h-[70vh] max-w-full object-contain transition-transform duration-200",
-                    isZoomed && "scale-[2.5]"
                   )}
-                  style={isZoomed ? {
+                  style={{
+                    transform: `scale(${zoomScale})`,
                     transformOrigin: `${zoomPosition.x}% ${zoomPosition.y}%`
-                  } : undefined}
+                  }}
                   draggable={false}
                 />
                 {!isZoomed && (
                   <div className="absolute bottom-4 left-1/2 -translate-x-1/2 bg-black/60 text-white/80 text-xs px-3 py-1 rounded-full pointer-events-none">
-                    Clique para ampliar
+                    <span className="hidden sm:inline">Clique para ampliar</span>
+                    <span className="sm:hidden">Toque ou use dois dedos para ampliar</span>
                   </div>
                 )}
               </div>
