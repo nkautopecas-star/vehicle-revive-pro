@@ -16,6 +16,7 @@ import IA from "./pages/IA";
 import Precificacao from "./pages/Precificacao";
 import Notas from "./pages/Notas";
 import Integracoes from "./pages/Integracoes";
+import Anuncios from "./pages/Anuncios";
 import Configuracoes from "./pages/Configuracoes";
 import Usuarios from "./pages/Usuarios";
 import Auth from "./pages/Auth";
@@ -41,6 +42,7 @@ const App = () => (
             <Route path="/pecas/:id" element={<ProtectedRoute><PecaDetalhes /></ProtectedRoute>} />
             <Route path="/estoque" element={<ProtectedRoute><Estoque /></ProtectedRoute>} />
             <Route path="/marketplaces" element={<ProtectedRoute><Marketplaces /></ProtectedRoute>} />
+            <Route path="/anuncios" element={<ProtectedRoute><Anuncios /></ProtectedRoute>} />
             <Route path="/perguntas" element={<ProtectedRoute><Perguntas /></ProtectedRoute>} />
             <Route path="/ia" element={<ProtectedRoute><IA /></ProtectedRoute>} />
             <Route path="/precificacao" element={<ProtectedRoute><Precificacao /></ProtectedRoute>} />
