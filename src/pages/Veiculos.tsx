@@ -51,7 +51,7 @@ const Veiculos = () => {
   const [isDeleteOpen, setIsDeleteOpen] = useState(false);
   const [selectedVehicle, setSelectedVehicle] = useState<Vehicle | null>(null);
 
-  const canEdit = hasAnyRole(['admin', 'operador']);
+  const canEdit = hasRole('admin');
   const canDelete = hasRole('admin');
 
   const filteredVehicles = vehicles.filter((vehicle) => {
