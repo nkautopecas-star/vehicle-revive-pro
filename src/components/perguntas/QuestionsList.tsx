@@ -2,6 +2,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Switch } from "@/components/ui/switch";
+import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
 import { Search, MessageSquare, Clock, CheckCheck } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
@@ -22,6 +24,8 @@ interface QuestionsListProps {
   pendingCount: number;
   searchQuery: string;
   onSearchChange: (query: string) => void;
+  showActiveOnly: boolean;
+  onShowActiveOnlyChange: (value: boolean) => void;
 }
 
 export function QuestionsList({
@@ -32,6 +36,8 @@ export function QuestionsList({
   pendingCount,
   searchQuery,
   onSearchChange,
+  showActiveOnly,
+  onShowActiveOnlyChange,
 }: QuestionsListProps) {
   return (
     <Card className="flex-1 flex flex-col overflow-hidden">
@@ -47,14 +53,26 @@ export function QuestionsList({
             )}
           </CardTitle>
         </div>
-        <div className="relative">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-          <Input
-            placeholder="Buscar perguntas..."
-            className="pl-9"
-            value={searchQuery}
-            onChange={(e) => onSearchChange(e.target.value)}
-          />
+        <div className="space-y-3">
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+            <Input
+              placeholder="Buscar perguntas..."
+              className="pl-9"
+              value={searchQuery}
+              onChange={(e) => onSearchChange(e.target.value)}
+            />
+          </div>
+          <div className="flex items-center gap-2">
+            <Switch
+              id="active-only"
+              checked={showActiveOnly}
+              onCheckedChange={onShowActiveOnlyChange}
+            />
+            <Label htmlFor="active-only" className="text-sm text-muted-foreground cursor-pointer">
+              Apenas itens ativos
+            </Label>
+          </div>
         </div>
       </CardHeader>
       <CardContent className="flex-1 overflow-y-auto p-0">

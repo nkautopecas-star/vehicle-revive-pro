@@ -7,9 +7,11 @@ import { useMarketplaceQuestions, type MarketplaceQuestion } from "@/hooks/useMa
 const Perguntas = () => {
   const [selectedQuestion, setSelectedQuestion] = useState<MarketplaceQuestion | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
+  const [showActiveOnly, setShowActiveOnly] = useState(true);
 
   const { data: questions = [], isLoading } = useMarketplaceQuestions({
     search: searchQuery || undefined,
+    listingStatus: showActiveOnly ? "active" : "all",
   });
 
   const pendingCount = useMemo(
@@ -34,6 +36,8 @@ const Perguntas = () => {
             pendingCount={pendingCount}
             searchQuery={searchQuery}
             onSearchChange={setSearchQuery}
+            showActiveOnly={showActiveOnly}
+            onShowActiveOnlyChange={setShowActiveOnly}
           />
         </div>
 
