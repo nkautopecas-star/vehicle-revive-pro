@@ -111,6 +111,65 @@ export function useMarketplaceListings(options: UseMarketplaceListingsOptions = 
   });
 }
 
+export interface ListingStats {
+  total: number;
+  active: number;
+  paused: number;
+  sold: number;
+  linked: number;
+}
+
+export function useMarketplaceListingStats(accountId?: string) {
+  return useQuery({
+    queryKey: ["marketplace-listing-stats", accountId],
+    queryFn: async (): Promise<ListingStats> => {
+      // Build base query filter
+      const baseFilter = accountId ? { marketplace_account_id: accountId } : {};
+
+      // Get counts for each status in parallel
+      const [totalResult, activeResult, pausedResult, soldResult, linkedResult] = await Promise.all([
+        // Total count
+        supabase
+          .from("marketplace_listings")
+          .select("*", { count: "exact", head: true })
+          .match(baseFilter),
+        // Active count
+        supabase
+          .from("marketplace_listings")
+          .select("*", { count: "exact", head: true })
+          .match(baseFilter)
+          .eq("status", "active"),
+        // Paused count
+        supabase
+          .from("marketplace_listings")
+          .select("*", { count: "exact", head: true })
+          .match(baseFilter)
+          .eq("status", "paused"),
+        // Sold count
+        supabase
+          .from("marketplace_listings")
+          .select("*", { count: "exact", head: true })
+          .match(baseFilter)
+          .eq("status", "sold"),
+        // Linked count (has part_id)
+        supabase
+          .from("marketplace_listings")
+          .select("*", { count: "exact", head: true })
+          .match(baseFilter)
+          .not("part_id", "is", null),
+      ]);
+
+      return {
+        total: totalResult.count || 0,
+        active: activeResult.count || 0,
+        paused: pausedResult.count || 0,
+        sold: soldResult.count || 0,
+        linked: linkedResult.count || 0,
+      };
+    },
+  });
+}
+
 export function useMarketplaceAccounts() {
   return useQuery({
     queryKey: ["marketplace-accounts"],
