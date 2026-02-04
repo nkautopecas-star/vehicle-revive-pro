@@ -21,14 +21,26 @@ import {
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import {
   Search,
   ExternalLink,
   Package,
   Filter,
   RefreshCw,
   ShoppingBag,
+  Link2,
 } from "lucide-react";
-import { useMarketplaceListings, useMarketplaceAccounts } from "@/hooks/useMarketplaceListings";
+import {
+  useMarketplaceListings,
+  useMarketplaceAccounts,
+  useLinkListingToPart,
+  MarketplaceListing,
+} from "@/hooks/useMarketplaceListings";
+import { LinkPartDialog } from "@/components/anuncios/LinkPartDialog";
 import { formatDistanceToNow } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { Link } from "react-router-dom";
@@ -37,6 +49,8 @@ export default function Anuncios() {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [accountFilter, setAccountFilter] = useState("all");
+  const [linkDialogOpen, setLinkDialogOpen] = useState(false);
+  const [selectedListing, setSelectedListing] = useState<MarketplaceListing | null>(null);
 
   const { data: accounts, isLoading: accountsLoading } = useMarketplaceAccounts();
   const { data: listings, isLoading, refetch, isFetching } = useMarketplaceListings({
@@ -44,6 +58,25 @@ export default function Anuncios() {
     status: statusFilter,
     search: search.length >= 2 ? search : undefined,
   });
+  const linkMutation = useLinkListingToPart();
+
+  const handleOpenLinkDialog = (listing: MarketplaceListing) => {
+    setSelectedListing(listing);
+    setLinkDialogOpen(true);
+  };
+
+  const handleLinkPart = (partId: string | null) => {
+    if (!selectedListing) return;
+    linkMutation.mutate(
+      { listingId: selectedListing.id, partId },
+      {
+        onSuccess: () => {
+          setLinkDialogOpen(false);
+          setSelectedListing(null);
+        },
+      }
+    );
+  };
 
   const getStatusBadge = (status: string) => {
     switch (status) {
@@ -247,9 +280,15 @@ export default function Anuncios() {
                             {listing.part.codigo_interno || listing.part.nome}
                           </Link>
                         ) : (
-                          <span className="text-muted-foreground text-sm">
-                            Não vinculado
-                          </span>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleOpenLinkDialog(listing)}
+                            className="text-muted-foreground hover:text-primary h-auto py-1 px-2"
+                          >
+                            <Link2 className="h-3 w-3 mr-1" />
+                            Vincular peça
+                          </Button>
                         )}
                       </TableCell>
                       <TableCell className="text-sm text-muted-foreground">
@@ -261,22 +300,44 @@ export default function Anuncios() {
                           : "-"}
                       </TableCell>
                       <TableCell className="text-right">
-                        {listing.external_id && (
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            asChild
-                            className="h-8 w-8"
-                          >
-                            <a
-                              href={`https://www.mercadolivre.com.br/p/${listing.external_id}`}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                            >
-                              <ExternalLink className="h-4 w-4" />
-                            </a>
-                          </Button>
-                        )}
+                        <div className="flex items-center justify-end gap-1">
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-8 w-8"
+                                onClick={() => handleOpenLinkDialog(listing)}
+                              >
+                                <Link2 className="h-4 w-4" />
+                              </Button>
+                            </TooltipTrigger>
+                            <TooltipContent>
+                              {listing.part ? "Alterar vínculo" : "Vincular peça"}
+                            </TooltipContent>
+                          </Tooltip>
+                          {listing.external_id && (
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  asChild
+                                  className="h-8 w-8"
+                                >
+                                  <a
+                                    href={`https://www.mercadolivre.com.br/p/${listing.external_id}`}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                  >
+                                    <ExternalLink className="h-4 w-4" />
+                                  </a>
+                                </Button>
+                              </TooltipTrigger>
+                              <TooltipContent>Abrir no Mercado Livre</TooltipContent>
+                            </Tooltip>
+                          )}
+                        </div>
                       </TableCell>
                     </TableRow>
                   ))
@@ -292,6 +353,19 @@ export default function Anuncios() {
             Exibindo {listings.length} anúncios
             {listings.length === 500 && " (limite máximo)"}
           </p>
+        )}
+
+        {/* Link Part Dialog */}
+        {selectedListing && (
+          <LinkPartDialog
+            open={linkDialogOpen}
+            onOpenChange={setLinkDialogOpen}
+            listingId={selectedListing.id}
+            listingTitle={selectedListing.titulo}
+            currentPartId={selectedListing.part_id}
+            onLink={handleLinkPart}
+            isLinking={linkMutation.isPending}
+          />
         )}
       </div>
     </AppLayout>

@@ -1,5 +1,6 @@
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { toast } from "sonner";
 
 export interface MarketplaceListing {
   id: string;
@@ -79,6 +80,39 @@ export function useMarketplaceAccounts() {
 
       if (error) throw error;
       return data;
+    },
+  });
+}
+
+export function useLinkListingToPart() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({
+      listingId,
+      partId,
+    }: {
+      listingId: string;
+      partId: string | null;
+    }) => {
+      const { error } = await supabase
+        .from("marketplace_listings")
+        .update({ part_id: partId })
+        .eq("id", listingId);
+
+      if (error) throw error;
+    },
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: ["marketplace-listings"] });
+      if (variables.partId) {
+        toast.success("Anúncio vinculado à peça com sucesso!");
+      } else {
+        toast.success("Vínculo removido com sucesso!");
+      }
+    },
+    onError: (error) => {
+      console.error("Error linking listing to part:", error);
+      toast.error("Erro ao vincular anúncio. Verifique suas permissões.");
     },
   });
 }
