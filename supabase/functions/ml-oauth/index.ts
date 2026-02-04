@@ -50,7 +50,9 @@ serve(async (req) => {
         );
       }
 
-      const authUrl = `${ML_AUTH_URL}?response_type=code&client_id=${ML_APP_ID}&redirect_uri=${encodeURIComponent(redirectUri)}`;
+      // Include required scopes for ML API access
+      const scopes = 'read write offline_access';
+      const authUrl = `${ML_AUTH_URL}?response_type=code&client_id=${ML_APP_ID}&redirect_uri=${encodeURIComponent(redirectUri)}&scope=${encodeURIComponent(scopes)}`;
       
       console.log('Generated ML auth URL:', authUrl);
       
