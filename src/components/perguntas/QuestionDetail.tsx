@@ -112,13 +112,13 @@ export function QuestionDetail({ question }: QuestionDetailProps) {
     ? `https://www.mercadolivre.com.br/p/${question.listing.external_id}`
     : null;
 
-  // Get product image from linked part
-  const productImage = question.listing?.part?.part_images
+  // Get product image: first from linked part, then from cached ML image
+  const partImage = question.listing?.part?.part_images
     ?.sort((a, b) => (a.order_position ?? 0) - (b.order_position ?? 0))[0]?.file_path;
 
-  const imageUrl = productImage
-    ? `${import.meta.env.VITE_SUPABASE_URL}/storage/v1/object/public/part-images/${productImage}`
-    : null;
+  const imageUrl = partImage
+    ? `${import.meta.env.VITE_SUPABASE_URL}/storage/v1/object/public/part-images/${partImage}`
+    : question.listing?.image_url || null;
 
   return (
     <Card className="flex-1 flex flex-col overflow-hidden">

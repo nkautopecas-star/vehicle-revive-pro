@@ -76,6 +76,7 @@ export type Database = {
           created_at: string
           external_id: string | null
           id: string
+          image_url: string | null
           last_sync: string | null
           marketplace_account_id: string
           part_id: string | null
@@ -88,6 +89,7 @@ export type Database = {
           created_at?: string
           external_id?: string | null
           id?: string
+          image_url?: string | null
           last_sync?: string | null
           marketplace_account_id: string
           part_id?: string | null
@@ -100,6 +102,7 @@ export type Database = {
           created_at?: string
           external_id?: string | null
           id?: string
+          image_url?: string | null
           last_sync?: string | null
           marketplace_account_id?: string
           part_id?: string | null
