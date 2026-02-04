@@ -89,8 +89,18 @@ export function QuestionsList({
                   )}
                 >
                   <div className="flex items-start gap-3">
-                    <div className="flex items-center justify-center w-10 h-10 rounded-lg bg-muted text-xl shrink-0">
-                      📦
+                    <div className="w-10 h-10 rounded-lg bg-muted overflow-hidden shrink-0">
+                      {q.listing?.image_url ? (
+                        <img
+                          src={q.listing.image_url}
+                          alt={q.listing?.titulo || "Produto"}
+                          className="w-full h-full object-cover"
+                        />
+                      ) : (
+                        <div className="flex items-center justify-center w-full h-full text-xl">
+                          📦
+                        </div>
+                      )}
                     </div>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 mb-1">
