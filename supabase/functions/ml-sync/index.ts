@@ -286,50 +286,52 @@ serve(async (req) => {
           const mlUserId = mlUser.id;
           console.log('ML User ID:', mlUserId);
 
-          // Fetch ALL items from ML using date-based pagination to bypass the 1000 offset limit
+          // Fetch ALL items from ML using scroll_id for pagination beyond 1000 offset limit
           const limit = 50;
           let allItems: any[] = [];
           const statuses = ['active', 'paused'];
           
           for (const status of statuses) {
+            let offset = 0;
+            let scrollId: string | null = null;
             let hasMore = true;
-            let lastDateCreated: string | null = null;
-            let fetchedIds = new Set<string>();
             
             console.log(`Starting to fetch all ${status} items...`);
             
             while (hasMore) {
-              let endpoint = `/users/${mlUserId}/items/search?status=${status}&limit=${limit}&sort=date_created&order=desc`;
+              let endpoint: string;
               
-              if (lastDateCreated) {
-                endpoint += `&date_created_to=${encodeURIComponent(lastDateCreated)}`;
+              // Use scroll_id if available (for pagination beyond 1000)
+              if (scrollId) {
+                endpoint = `/users/${mlUserId}/items/search?status=${status}&scroll_id=${scrollId}`;
+              } else {
+                endpoint = `/users/${mlUserId}/items/search?status=${status}&offset=${offset}&limit=${limit}`;
               }
               
               let searchResult;
               try {
                 searchResult = await mlApiCall(endpoint, accessToken);
               } catch (error) {
-                console.log(`Error fetching ${status} items:`, error);
+                console.log(`Error fetching ${status} items at offset ${offset}:`, error);
                 break;
               }
               
               const results = searchResult.results || [];
-              console.log(`Fetched ${results.length} ${status} item IDs`);
+              console.log(`Fetched ${results.length} ${status} item IDs (offset: ${offset})`);
               
               if (results.length === 0) {
                 hasMore = false;
                 break;
               }
               
-              const newItemIds = results.filter((id: string) => !fetchedIds.has(id));
-              
-              if (newItemIds.length === 0) {
-                hasMore = false;
-                break;
+              // Get scroll_id for next page if available
+              if (searchResult.scroll_id) {
+                scrollId = searchResult.scroll_id;
               }
               
-              for (let i = 0; i < newItemIds.length; i += 20) {
-                const batch = newItemIds.slice(i, i + 20);
+              // Get full item details in batches of 20
+              for (let i = 0; i < results.length; i += 20) {
+                const batch = results.slice(i, i + 20);
                 const itemsResponse = await mlApiCall(
                   `/items?ids=${batch.join(',')}`,
                   accessToken
@@ -337,29 +339,30 @@ serve(async (req) => {
                 
                 for (const itemData of itemsResponse) {
                   if (itemData.code === 200 && itemData.body) {
-                    const item = itemData.body;
-                    fetchedIds.add(item.id);
-                    allItems.push(item);
-                    
-                    if (item.date_created) {
-                      if (!lastDateCreated || item.date_created < lastDateCreated) {
-                        lastDateCreated = item.date_created;
-                      }
-                    }
+                    allItems.push(itemData.body);
                   }
                 }
               }
               
-              if (results.length < limit) {
-                hasMore = false;
-              }
-              
               // Update job with total items found so far
               await updateJobProgress({ total_items: allItems.length });
-              console.log(`Progress: ${fetchedIds.size} ${status} items fetched so far...`);
+              
+              // Check if we should continue
+              if (results.length < limit) {
+                hasMore = false;
+              } else {
+                offset += limit;
+                // If we're past 1000 offset and don't have scroll_id, we've hit the limit
+                if (offset >= 1000 && !scrollId) {
+                  console.log(`Reached offset limit of 1000 for ${status}, stopping.`);
+                  hasMore = false;
+                }
+              }
+              
+              console.log(`Progress: ${allItems.length} total items fetched so far...`);
             }
             
-            console.log(`Completed ${status}: ${fetchedIds.size} items total`);
+            console.log(`Completed ${status}: fetched items, total now: ${allItems.length}`);
           }
 
           console.log(`Total items fetched from ML: ${allItems.length}`);
