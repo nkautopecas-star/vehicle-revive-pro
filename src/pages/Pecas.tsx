@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -26,9 +26,10 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Plus, Search, MoreHorizontal, Edit, Trash2, Sparkles, MapPin, Package, Download, FileSpreadsheet, Upload } from "lucide-react";
+import { Plus, Search, MoreHorizontal, Edit, Trash2, Sparkles, MapPin, Package, Download, FileSpreadsheet, Upload, Car } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useParts, useCategories, useCreatePart, useUpdatePart, useDeletePart, type Part, type PartFormData } from "@/hooks/useParts";
+import { useAllPartCompatibilities, filterPartsByCompatibility } from "@/hooks/usePartsWithCompatibilities";
 import { PartFormDialog } from "@/components/parts/PartFormDialog";
 import { DeletePartDialog } from "@/components/parts/DeletePartDialog";
 import { PartThumbnail } from "@/components/parts/PartThumbnail";
@@ -49,6 +50,7 @@ const condicaoConfig = {
 
 const Pecas = () => {
   const [searchTerm, setSearchTerm] = useState("");
+  const [compatibilitySearch, setCompatibilitySearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [categoriaFilter, setCategoriaFilter] = useState<string>("all");
   
@@ -60,9 +62,20 @@ const Pecas = () => {
 
   const { data: parts = [], isLoading } = useParts();
   const { data: categories = [] } = useCategories();
+  const { data: compatibilityMap = new Map() } = useAllPartCompatibilities();
   const createMutation = useCreatePart();
   const updateMutation = useUpdatePart();
   const deleteMutation = useDeletePart();
+
+  // Get parts that match compatibility filter
+  const compatiblePartIds = useMemo(() => {
+    if (!compatibilitySearch.trim()) return null;
+    return filterPartsByCompatibility(
+      parts.map(p => p.id),
+      compatibilityMap,
+      compatibilitySearch
+    );
+  }, [parts, compatibilityMap, compatibilitySearch]);
 
   const filteredParts = parts.filter((part) => {
     const matchesSearch =
@@ -72,7 +85,8 @@ const Pecas = () => {
       (part.veiculo_info?.toLowerCase().includes(searchTerm.toLowerCase()) ?? false);
     const matchesStatus = statusFilter === "all" || part.status === statusFilter;
     const matchesCategoria = categoriaFilter === "all" || part.categoria_id === categoriaFilter;
-    return matchesSearch && matchesStatus && matchesCategoria;
+    const matchesCompatibility = compatiblePartIds === null || compatiblePartIds.has(part.id);
+    return matchesSearch && matchesStatus && matchesCategoria && matchesCompatibility;
   });
 
   const totalEstoque = filteredParts.reduce((acc, p) => acc + p.quantidade, 0);
@@ -130,12 +144,21 @@ const Pecas = () => {
         {/* Filters and Actions */}
         <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between">
           <div className="flex flex-1 gap-3 w-full sm:w-auto flex-wrap">
-            <div className="relative flex-1 min-w-[200px] max-w-md">
+            <div className="relative flex-1 min-w-[180px] max-w-xs">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
               <Input
                 placeholder="Buscar peças..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
+                className="pl-9"
+              />
+            </div>
+            <div className="relative flex-1 min-w-[180px] max-w-xs">
+              <Car className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+              <Input
+                placeholder="Buscar por compatibilidade..."
+                value={compatibilitySearch}
+                onChange={(e) => setCompatibilitySearch(e.target.value)}
                 className="pl-9"
               />
             </div>
