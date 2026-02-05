@@ -121,7 +121,9 @@ serve(async (req) => {
       }
 
       const tokenData = await tokenResponse.json();
-      console.log('Token exchange successful, fetching user info...');
+      console.log('Token exchange successful. Has refresh_token:', !!tokenData.refresh_token);
+      console.log('Token data keys:', Object.keys(tokenData).join(', '));
+      console.log('Fetching user info...');
 
       // Get ML user info
       const userResponse = await fetch(ML_USER_URL, {
