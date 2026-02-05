@@ -50,7 +50,9 @@ serve(async (req) => {
         case 'questions':
           console.log('Processing questions notification');
           // Fetch and save the new question
+          let questionProcessed = false;
           for (const account of accounts) {
+            if (questionProcessed) break;
             try {
               const questionResponse = await fetch(`${ML_API_URL}${resource}`, {
                 headers: { Authorization: `Bearer ${account.access_token}` },
@@ -60,16 +62,53 @@ serve(async (req) => {
               
               const question = await questionResponse.json();
               
-              // Find listing
-              const { data: listing } = await supabase
+              // Find or create listing
+              let { data: listing } = await supabase
                 .from('marketplace_listings')
                 .select('id')
                 .eq('external_id', question.item_id)
                 .single();
 
+              // If listing doesn't exist, try to fetch item and create it
+              if (!listing) {
+                console.log('Listing not found for question, fetching item:', question.item_id);
+                const itemResponse = await fetch(`${ML_API_URL}/items/${question.item_id}`, {
+                  headers: { Authorization: `Bearer ${account.access_token}` },
+                });
+                
+                if (itemResponse.ok) {
+                  const item = await itemResponse.json();
+                  const imageUrl = item.pictures?.[0]?.url || item.pictures?.[0]?.secure_url || item.thumbnail || null;
+                  
+                  let status: 'active' | 'paused' | 'sold' = 'active';
+                  if (item.status === 'paused' || item.status === 'under_review') {
+                    status = 'paused';
+                  } else if (item.status === 'closed') {
+                    status = 'sold';
+                  }
+
+                  const { data: newListing } = await supabase
+                    .from('marketplace_listings')
+                    .insert({
+                      external_id: question.item_id,
+                      titulo: item.title || 'Produto sem título',
+                      preco: item.price || 0,
+                      status,
+                      marketplace_account_id: account.id,
+                      last_sync: new Date().toISOString(),
+                      image_url: imageUrl,
+                    })
+                    .select('id')
+                    .single();
+
+                  listing = newListing;
+                  console.log('Created listing for question:', listing?.id);
+                }
+              }
+
               if (!listing) continue;
 
-              // Check if exists
+              // Check if question exists
               const { data: existing } = await supabase
                 .from('marketplace_questions')
                 .select('id')
@@ -77,19 +116,35 @@ serve(async (req) => {
                 .single();
 
               if (!existing && question.status === 'UNANSWERED') {
+                // Try to get customer name
+                let customerName = 'Usuário ML';
+                if (question.from?.id) {
+                  try {
+                    const buyerResponse = await fetch(`${ML_API_URL}/users/${question.from.id}`, {
+                      headers: { Authorization: `Bearer ${account.access_token}` },
+                    });
+                    if (buyerResponse.ok) {
+                      const buyer = await buyerResponse.json();
+                      customerName = buyer.nickname || 'Usuário ML';
+                    }
+                  } catch (e) {
+                    console.log('Could not fetch buyer info');
+                  }
+                }
+
                 await supabase
                   .from('marketplace_questions')
                   .insert({
                     listing_id: listing.id,
                     external_id: question.id.toString(),
                     question: question.text,
-                    customer_name: 'Usuário ML',
+                    customer_name: customerName,
                     status: 'pending',
                     received_at: question.date_created,
                   });
                 console.log('New question saved:', question.id);
               }
-              break;
+              questionProcessed = true;
             } catch (e) {
               console.error('Error processing question:', e);
             }
@@ -179,7 +234,9 @@ serve(async (req) => {
         case 'items':
           console.log('Processing item update notification');
           // Item was updated on ML side - sync status
+          let itemProcessed = false;
           for (const account of accounts) {
+            if (itemProcessed) break;
             try {
               const itemResponse = await fetch(`${ML_API_URL}${resource}`, {
                 headers: { Authorization: `Bearer ${account.access_token}` },
@@ -189,18 +246,35 @@ serve(async (req) => {
               
               const item = await itemResponse.json();
               
+              // Map ML status to our status
+              let mappedStatus: 'active' | 'paused' | 'sold' = 'paused';
+              if (item.status === 'active') {
+                mappedStatus = 'active';
+              } else if (item.status === 'closed') {
+                mappedStatus = 'sold';
+              }
+
+              // Get image URL
+              const imageUrl = item.pictures?.[0]?.url || item.pictures?.[0]?.secure_url || item.thumbnail || null;
+              
               // Update our listing
-              await supabase
+              const { data: updatedListing } = await supabase
                 .from('marketplace_listings')
                 .update({
+                  titulo: item.title,
                   preco: item.price,
-                  status: item.status === 'active' ? 'active' : 'paused',
+                  status: mappedStatus,
+                  image_url: imageUrl,
                   last_sync: new Date().toISOString(),
                 })
-                .eq('external_id', item.id);
+                .eq('external_id', item.id)
+                .select('id')
+                .single();
 
-              console.log('Listing updated from webhook:', item.id);
-              break;
+              if (updatedListing) {
+                console.log('Listing updated from webhook:', item.id);
+                itemProcessed = true;
+              }
             } catch (e) {
               console.error('Error processing item update:', e);
             }
