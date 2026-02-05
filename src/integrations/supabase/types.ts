@@ -459,8 +459,10 @@ export type Database = {
       }
       sync_jobs: {
         Row: {
+          attempts: number
           completed_at: string | null
           created_at: string
+          cursor: Json | null
           error_message: string | null
           id: string
           imported_items: number | null
@@ -472,8 +474,10 @@ export type Database = {
           updated_items: number | null
         }
         Insert: {
+          attempts?: number
           completed_at?: string | null
           created_at?: string
+          cursor?: Json | null
           error_message?: string | null
           id?: string
           imported_items?: number | null
@@ -485,8 +489,10 @@ export type Database = {
           updated_items?: number | null
         }
         Update: {
+          attempts?: number
           completed_at?: string | null
           created_at?: string
+          cursor?: Json | null
           error_message?: string | null
           id?: string
           imported_items?: number | null

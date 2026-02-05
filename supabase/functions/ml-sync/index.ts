@@ -14,15 +14,23 @@ const ML_TOKEN_URL = 'https://api.mercadolibre.com/oauth/token';
 const ML_APP_ID = Deno.env.get('ML_APP_ID')!;
 const ML_CLIENT_SECRET = Deno.env.get('ML_CLIENT_SECRET')!;
 
-// Type for retry context
 interface RetryContext {
   supabase: any;
   accountId: string;
   refreshToken: string;
 }
 
-// Helper to refresh access token
-async function refreshAccessToken(supabase: any, accountId: string, refreshToken: string): Promise<string | null> {
+interface SyncCursor {
+  statuses: string[];
+  statusIndex: number;
+  offset: number;
+  dateEnd: string | null;
+  mlUserId?: number;
+  totalFetched: number;
+  emptyPagesInARow: number;
+}
+
+async function refreshAccessToken(supabase: ReturnType<typeof createClient>, accountId: string, refreshToken: string): Promise<string | null> {
   console.log('Refreshing access token for account:', accountId);
   
   try {
@@ -39,7 +47,7 @@ async function refreshAccessToken(supabase: any, accountId: string, refreshToken
 
     if (!tokenResponse.ok) {
       console.error('Token refresh failed:', await tokenResponse.text());
-      await supabase
+      await (supabase as any)
         .from('marketplace_accounts')
         .update({ status: 'error' })
         .eq('id', accountId);
@@ -48,7 +56,7 @@ async function refreshAccessToken(supabase: any, accountId: string, refreshToken
 
     const tokenData = await tokenResponse.json();
     
-    await supabase
+    await (supabase as any)
       .from('marketplace_accounts')
       .update({
         access_token: tokenData.access_token,
@@ -66,7 +74,6 @@ async function refreshAccessToken(supabase: any, accountId: string, refreshToken
   }
 }
 
-// Helper to make authenticated ML API calls with auto-refresh
 async function mlApiCall(
   endpoint: string, 
   accessToken: string, 
@@ -85,7 +92,6 @@ async function mlApiCall(
   if (!response.ok) {
     const error = await response.text();
     
-    // Check for 401 unauthorized - try to refresh token
     if (response.status === 401 && retryContext) {
       console.log('Got 401, attempting to refresh token...');
       const newToken = await refreshAccessToken(
@@ -96,13 +102,12 @@ async function mlApiCall(
       
       if (newToken) {
         console.log('Retrying request with new token...');
-        return mlApiCall(endpoint, newToken, options); // No retry context to prevent infinite loop
+        return mlApiCall(endpoint, newToken, options);
       } else {
         throw new Error('TOKEN_EXPIRED: Não foi possível renovar o token do Mercado Livre. Por favor, reconecte sua conta na página de Integrações.');
       }
     }
     
-    // Parse error to provide better messages
     let parsedError;
     try {
       parsedError = JSON.parse(error);
@@ -110,7 +115,6 @@ async function mlApiCall(
       throw new Error(`ML API error: ${response.status} - ${error}`);
     }
 
-    // Check for specific error codes and provide user-friendly messages
     const causes = parsedError.cause || [];
     const errorMessages: string[] = [];
     let requiresPictures = false;
@@ -156,7 +160,6 @@ serve(async (req) => {
 
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
     
-    // Verify user
     const token = authHeader.replace('Bearer ', '');
     const { data: userData, error: userError } = await supabase.auth.getUser(token);
     
@@ -170,7 +173,6 @@ serve(async (req) => {
     const body = await req.json();
     const { action, account_id, part_id, listing_data } = body;
 
-    // Get account with access token
     const { data: account, error: accountError } = await supabase
       .from('marketplace_accounts')
       .select('*')
@@ -187,18 +189,16 @@ serve(async (req) => {
     const accessToken = account.access_token;
     const refreshToken = account.refresh_token;
     
-    // Create retry context for auto-refresh
     const retryContext: RetryContext = {
       supabase,
       accountId: account_id,
       refreshToken: refreshToken || '',
     };
 
-    // Create listing from part
+    // ===== CREATE LISTING =====
     if (action === 'create_listing') {
       console.log('Creating listing for part:', part_id);
 
-      // Get part details
       const { data: part, error: partError } = await supabase
         .from('parts')
         .select(`
@@ -217,7 +217,6 @@ serve(async (req) => {
         );
       }
 
-      // Build title with compatibility info
       let title = part.nome;
       if (part.vehicles) {
         title = `${part.nome} ${part.vehicles.marca} ${part.vehicles.modelo} ${part.vehicles.ano}`;
@@ -225,24 +224,20 @@ serve(async (req) => {
         const compat = part.part_compatibilities[0];
         title = `${part.nome} ${compat.marca} ${compat.modelo}`;
       }
-      title = title.substring(0, 60); // ML title limit
+      title = title.substring(0, 60);
 
-      // Build family_name - generic description of the product (max 120 chars)
-      // This is required by the new ML User Products model
       let familyName = part.nome;
       if (part.codigo_oem) {
         familyName = `${part.nome} ${part.codigo_oem}`;
       }
       familyName = familyName.substring(0, 120);
 
-      // Build description
       let description = `${part.nome}\n\n`;
       if (part.codigo_oem) description += `Código OEM: ${part.codigo_oem}\n`;
       if (part.codigo_interno) description += `Código Interno: ${part.codigo_interno}\n`;
       description += `Condição: ${part.condicao}\n`;
       if (part.observacoes) description += `\nObservações: ${part.observacoes}\n`;
 
-      // Add compatibility info
       if (part.part_compatibilities?.length > 0) {
         description += '\n--- Compatibilidade ---\n';
         for (const compat of part.part_compatibilities) {
@@ -254,21 +249,17 @@ serve(async (req) => {
         }
       }
 
-      // Get user site_id for category
       const mlUser = await mlApiCall('/users/me', accessToken, {}, retryContext);
-      const siteId = mlUser.site_id || 'MLB'; // Default to Brazil
+      const siteId = mlUser.site_id || 'MLB';
 
-      // Build attributes - required by ML API
-      // ITEM_CONDITION is always required
       const attributes: Array<{ id: string; value_id?: string; value_name?: string }> = [
         {
           id: 'ITEM_CONDITION',
-          value_id: part.condicao === 'nova' ? '2230284' : '2230581', // 2230284 = New, 2230581 = Used
+          value_id: part.condicao === 'nova' ? '2230284' : '2230581',
         },
       ];
 
-      // Add BRAND - REQUIRED for category MLB439572
-      let brandValue = 'Genérica'; // Default value
+      let brandValue = 'Genérica';
       if (part.part_compatibilities?.length > 0) {
         const marca = part.part_compatibilities[0].marca;
         if (marca) {
@@ -277,28 +268,15 @@ serve(async (req) => {
       } else if (part.vehicles?.marca) {
         brandValue = part.vehicles.marca;
       }
-      attributes.push({
-        id: 'BRAND',
-        value_name: brandValue,
-      });
+      attributes.push({ id: 'BRAND', value_name: brandValue });
 
-      // Add PART_NUMBER - REQUIRED for category MLB439572
-      // Use codigo_oem if available, otherwise use codigo_interno or generate one
       let partNumber = part.codigo_oem || part.codigo_interno || `INT-${part_id.substring(0, 8).toUpperCase()}`;
-      attributes.push({
-        id: 'PART_NUMBER',
-        value_name: partNumber,
-      });
+      attributes.push({ id: 'PART_NUMBER', value_name: partNumber });
 
-      // Add ALPHANUMERIC_OEM if codigo_oem is available
       if (part.codigo_oem) {
-        attributes.push({
-          id: 'ALPHANUMERIC_OEM',
-          value_name: part.codigo_oem,
-        });
+        attributes.push({ id: 'ALPHANUMERIC_OEM', value_name: part.codigo_oem });
       }
 
-      // Add package dimensions as attributes (required by ML)
       if (part.peso_gramas) {
         attributes.push({ id: 'SELLER_PACKAGE_WEIGHT', value_name: `${part.peso_gramas} g` });
       }
@@ -312,37 +290,32 @@ serve(async (req) => {
         attributes.push({ id: 'SELLER_PACKAGE_LENGTH', value_name: `${part.comprimento_cm} cm` });
       }
 
-      // Create ML listing data
-      // Determine listing type: gold_special requires pictures, gold_pro does not
       const hasPictures = part.part_images && part.part_images.length > 0;
       const listingTypeId = hasPictures ? 'gold_special' : 'gold_pro';
 
-      const mlListing = {
+      const mlListing: Record<string, any> = {
         family_name: familyName,
-        category_id: listing_data?.category_id || 'MLB439572', // Default: Bombas de Combustível
+        category_id: listing_data?.category_id || 'MLB439572',
         price: part.preco_venda || 100,
         currency_id: 'BRL',
         available_quantity: part.quantidade,
         buying_mode: 'buy_it_now',
-        listing_type_id: listingTypeId, // gold_pro if no pictures, gold_special if has pictures
+        listing_type_id: listingTypeId,
         description: { plain_text: description },
         attributes,
         pictures: part.part_images
           ?.sort((a: any, b: any) => (a.order_position || 0) - (b.order_position || 0))
-          ?.slice(0, 10) // ML max 10 images
+          ?.slice(0, 10)
           ?.map((img: any) => ({
             source: `${SUPABASE_URL}/storage/v1/object/public/part-images/${img.file_path}`,
           })) || [],
-        // Spread listing_data first, then override with our computed values
         ...(listing_data || {}),
       };
 
-      // Override category_id if not a valid leaf category (MLB1747 is parent category)
       if (!mlListing.category_id || mlListing.category_id === 'MLB1747') {
-        mlListing.category_id = 'MLB439572'; // Bombas de Combustível - leaf category
+        mlListing.category_id = 'MLB439572';
       }
 
-      // Override shipping with correct string format
       if (part.peso_gramas && part.comprimento_cm && part.largura_cm && part.altura_cm) {
         mlListing.shipping = {
           mode: 'me2',
@@ -351,13 +324,11 @@ serve(async (req) => {
           dimensions: `${Math.round(part.altura_cm)}x${Math.round(part.largura_cm)}x${Math.round(part.comprimento_cm)},${Math.round(part.peso_gramas)}`,
         };
       } else {
-        // Remove invalid shipping if present
         delete mlListing.shipping;
       }
 
       console.log('Creating ML listing:', JSON.stringify(mlListing, null, 2));
 
-      // Create listing on ML
       const mlResponse = await mlApiCall('/items', accessToken, {
         method: 'POST',
         body: JSON.stringify(mlListing),
@@ -365,7 +336,6 @@ serve(async (req) => {
 
       console.log('ML listing created:', mlResponse.id);
 
-      // Save listing in database
       const { data: newListing, error: listingError } = await supabase
         .from('marketplace_listings')
         .insert({
@@ -395,7 +365,7 @@ serve(async (req) => {
       );
     }
 
-    // Update listing stock/price
+    // ===== UPDATE LISTING =====
     if (action === 'update_listing') {
       const { listing_id, price, quantity, status } = body;
 
@@ -426,7 +396,6 @@ serve(async (req) => {
         body: JSON.stringify(updateData),
       }, retryContext);
 
-      // Update local listing
       await supabase
         .from('marketplace_listings')
         .update({
@@ -442,321 +411,277 @@ serve(async (req) => {
       );
     }
 
-    // Sync all listings for an account (fetch from ML and import)
+    // ===== SYNC ALL — RESUMABLE, ONE PAGE AT A TIME =====
     if (action === 'sync_all') {
-      console.log('Syncing all listings for account:', account_id);
+      console.log('sync_all called for account:', account_id);
 
-      // Create a sync job to track progress
-      const { data: syncJob, error: syncJobError } = await supabase
+      // Look for existing running/pending job or create one
+      let { data: syncJob } = await supabase
         .from('sync_jobs')
-        .insert({
-          marketplace_account_id: account_id,
-          status: 'pending',
-          total_items: 0,
-          processed_items: 0,
-          imported_items: 0,
-          updated_items: 0,
-        })
-        .select()
+        .select('*')
+        .eq('marketplace_account_id', account_id)
+        .in('status', ['pending', 'running'])
+        .order('created_at', { ascending: false })
+        .limit(1)
         .single();
 
-      if (syncJobError) {
-        console.error('Failed to create sync job:', syncJobError);
-        return new Response(
-          JSON.stringify({ error: 'Failed to create sync job' }),
-          { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        );
+      const isNew = !syncJob;
+
+      if (!syncJob) {
+        const defaultCursor: SyncCursor = {
+          statuses: ['active', 'paused', 'closed'],
+          statusIndex: 0,
+          offset: 0,
+          dateEnd: null,
+          totalFetched: 0,
+          emptyPagesInARow: 0,
+        };
+
+        const { data: newJob, error: jobError } = await supabase
+          .from('sync_jobs')
+          .insert({
+            marketplace_account_id: account_id,
+            status: 'running',
+            total_items: 0,
+            processed_items: 0,
+            imported_items: 0,
+            updated_items: 0,
+            cursor: defaultCursor,
+            attempts: 0,
+          })
+          .select()
+          .single();
+
+        if (jobError || !newJob) {
+          console.error('Failed to create sync job:', jobError);
+          return new Response(
+            JSON.stringify({ error: 'Failed to create sync job' }),
+            { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+        syncJob = newJob;
+      } else {
+        // Resume existing
+        await supabase
+          .from('sync_jobs')
+          .update({ status: 'running', attempts: (syncJob.attempts || 0) + 1 })
+          .eq('id', syncJob.id);
       }
 
       const jobId = syncJob.id;
+      let cursor: SyncCursor = syncJob.cursor || {
+        statuses: ['active', 'paused', 'closed'],
+        statusIndex: 0,
+        offset: 0,
+        dateEnd: null,
+        totalFetched: 0,
+        emptyPagesInARow: 0,
+      };
 
-      // Helper to update job progress
-      async function updateJobProgress(updates: Record<string, any>) {
-        await supabase
-          .from('sync_jobs')
-          .update(updates)
-          .eq('id', jobId);
+      // Helper to update job in DB
+      async function updateJob(updates: Record<string, any>) {
+        await supabase.from('sync_jobs').update(updates).eq('id', jobId);
       }
 
-      // Define background sync task
-      async function performSync() {
-        try {
-          // Mark job as running
-          await updateJobProgress({ status: 'running' });
-
-          // First, get ML user ID
+      try {
+        // Get ML user ID if not stored
+        if (!cursor.mlUserId) {
           const mlUser = await mlApiCall('/users/me', accessToken, {}, retryContext);
-          const mlUserId = mlUser.id;
-          console.log('ML User ID:', mlUserId);
+          cursor.mlUserId = mlUser.id;
+        }
+        const mlUserId = cursor.mlUserId;
 
-          // Fetch ALL items from ML using date-based pagination
-          // ML limits offset to 1000. To get ALL items, we paginate by date_created.
-          const limit = 50;
-          let allItems: any[] = [];
-          // Include 'closed' status to get sold items
-          const statuses = ['active', 'paused', 'closed'];
-          // Track all processed IDs globally to avoid duplicates across statuses
-          const globalProcessedIds = new Set<string>();
-          
-          for (const status of statuses) {
-            let hasMore = true;
-            let statusTotal = 0;
-            let dateEnd: string | null = null; // Will hold the oldest date found
-            let emptyPagesInARow = 0;
-            const MAX_EMPTY_PAGES = 3;
-            
-            console.log(`Starting to fetch all ${status} items...`);
-            
-            while (hasMore) {
-              let offset = 0;
-              let pageHasMore = true;
-              let oldestDateInPage: string | null = null;
-              
-              // Fetch up to 1000 items per date range (20 pages of 50)
-              while (pageHasMore && offset < 1000) {
-                let endpoint = `/users/${mlUserId}/items/search?status=${status}&offset=${offset}&limit=${limit}&sort=date_created_desc`;
-                
-                // Add date filter if we're past the first batch
-                if (dateEnd) {
-                  endpoint += `&date_created_to=${encodeURIComponent(dateEnd)}`;
-                }
-                
-                let searchResult;
-                try {
-                  searchResult = await mlApiCall(endpoint, accessToken, {}, retryContext);
-                } catch (error) {
-                  console.log(`Error fetching ${status} items at offset ${offset}:`, error);
-                  pageHasMore = false;
-                  break;
-                }
-                
-                const results = searchResult.results || [];
-                statusTotal = searchResult.paging?.total || 0;
-                
-                // Filter out already processed IDs
-                const newIds = results.filter((id: string) => !globalProcessedIds.has(id));
-                newIds.forEach((id: string) => globalProcessedIds.add(id));
-                
-                console.log(`Fetched ${results.length} ${status} items (${newIds.length} new, offset: ${offset}, total: ${statusTotal})`);
-                
-                // Get item details and track oldest date
-                for (let i = 0; i < newIds.length; i += 20) {
-                  const batch = newIds.slice(i, i + 20);
-                  try {
-                    const itemsResponse = await mlApiCall(
-                      `/items?ids=${batch.join(',')}&attributes=id,title,price,status,date_created,thumbnail,pictures`,
-                      accessToken,
-                      {},
-                      retryContext
-                    );
-                    
-                    for (const itemData of itemsResponse) {
-                      if (itemData.code === 200 && itemData.body) {
-                        allItems.push(itemData.body);
-                        // Track oldest date for next iteration
-                        if (itemData.body.date_created) {
-                          if (!oldestDateInPage || itemData.body.date_created < oldestDateInPage) {
-                            oldestDateInPage = itemData.body.date_created;
-                          }
-                        }
-                      }
-                    }
-                  } catch (error) {
-                    console.error(`Error fetching item details batch:`, error);
-                  }
-                  
-                  await new Promise(resolve => setTimeout(resolve, 50));
-                }
-                
-                // Update progress
-                await updateJobProgress({ total_items: allItems.length });
-                
-                // Check if we should continue this page
-                if (results.length < limit) {
-                  pageHasMore = false;
-                } else {
-                  offset += limit;
-                }
-              }
-              
-              // Check if we got any new items in this date range
-              if (!oldestDateInPage || oldestDateInPage === dateEnd) {
-                emptyPagesInARow++;
-                if (emptyPagesInARow >= MAX_EMPTY_PAGES) {
-                  console.log(`No new items for ${status} after ${MAX_EMPTY_PAGES} attempts, moving on`);
-                  hasMore = false;
-                }
-              } else {
-                emptyPagesInARow = 0;
-                dateEnd = oldestDateInPage; // Move date window back
-              }
-              
-              // If we fetched less than 1000 in this date range, we're done
-              if (offset < 1000) {
-                hasMore = false;
-              }
-              
-              console.log(`Progress: ${allItems.length} total fetched for ${status}, oldest: ${dateEnd || 'n/a'}`);
-            }
-            
-            console.log(`Completed ${status}: ${allItems.length} total fetched`);
-          }
+        const LIMIT = 50;
+        const MAX_EMPTY = 3;
 
-          console.log(`Total items fetched from ML: ${allItems.length}`);
-          
-          // Update total items
-          await updateJobProgress({ total_items: allItems.length });
-
-          // Get existing listings in our database
-          const { data: existingListings } = await supabase
-            .from('marketplace_listings')
-            .select('external_id')
-            .eq('marketplace_account_id', account_id);
-
-          const existingExternalIds = new Set(existingListings?.map(l => l.external_id) || []);
-
-          let imported = 0;
-          let updated = 0;
-          let processed = 0;
-          const errors: string[] = [];
-
-          const newItems = allItems.filter(item => !existingExternalIds.has(item.id));
-          const existingItems = allItems.filter(item => existingExternalIds.has(item.id));
-
-          console.log(`Processing: ${newItems.length} new, ${existingItems.length} existing`);
-
-          // Batch insert new items
-          const batchSize = 50;
-          for (let i = 0; i < newItems.length; i += batchSize) {
-            const batch = newItems.slice(i, i + batchSize);
-            const insertData = batch.map(item => {
-              // Get the first image URL from ML item pictures
-              const imageUrl = item.pictures?.[0]?.url || item.pictures?.[0]?.secure_url || item.thumbnail || null;
-              
-              // Map ML status to our status: active, paused, closed->sold
-              let mappedStatus: 'active' | 'paused' | 'sold' = 'paused';
-              if (item.status === 'active') {
-                mappedStatus = 'active';
-              } else if (item.status === 'closed') {
-                mappedStatus = 'sold';
-              }
-              
-              return {
-                marketplace_account_id: account_id,
-                external_id: item.id,
-                titulo: item.title?.substring(0, 255) || 'Sem título',
-                preco: item.price || 0,
-                status: mappedStatus,
-                part_id: null,
-                last_sync: new Date().toISOString(),
-                image_url: imageUrl,
-              };
-            });
-
-            const { error: batchError } = await supabase
-              .from('marketplace_listings')
-              .insert(insertData);
-
-            if (batchError) {
-              console.error(`Batch insert error (${i}-${i + batch.length}):`, batchError.message);
-              errors.push(`Batch ${i}: ${batchError.message}`);
-            } else {
-              imported += batch.length;
-            }
-            
-            processed += batch.length;
-            await updateJobProgress({ 
-              processed_items: processed, 
-              imported_items: imported 
-            });
-            
-            console.log(`Inserted batch ${i}-${i + batch.length}: ${batch.length} items`);
-          }
-
-          // Batch update existing items
-          for (let i = 0; i < existingItems.length; i += batchSize) {
-            const batch = existingItems.slice(i, i + batchSize);
-            
-            for (const item of batch) {
-              try {
-                // Get the first image URL from ML item pictures
-                const imageUrl = item.pictures?.[0]?.url || item.pictures?.[0]?.secure_url || item.thumbnail || null;
-                
-                // Map ML status to our status: active, paused, closed->sold
-                let mappedStatus: 'active' | 'paused' | 'sold' = 'paused';
-                if (item.status === 'active') {
-                  mappedStatus = 'active';
-                } else if (item.status === 'closed') {
-                  mappedStatus = 'sold';
-                }
-                
-                await supabase
-                  .from('marketplace_listings')
-                  .update({
-                    titulo: item.title?.substring(0, 255) || 'Sem título',
-                    preco: item.price || 0,
-                    status: mappedStatus,
-                    last_sync: new Date().toISOString(),
-                    image_url: imageUrl,
-                  })
-                  .eq('external_id', item.id)
-                  .eq('marketplace_account_id', account_id);
-                
-                updated++;
-              } catch (error: unknown) {
-                const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-                errors.push(`Update ${item.id}: ${errorMessage}`);
-              }
-            }
-            
-            processed += batch.length;
-            await updateJobProgress({ 
-              processed_items: processed, 
-              updated_items: updated 
-            });
-            
-            console.log(`Updated batch ${i}-${i + batch.length}`);
-          }
-
-          console.log(`Sync complete: ${imported} imported, ${updated} updated, ${errors.length} errors`);
-
-          // Mark job as completed
-          await updateJobProgress({ 
+        // --- FETCH ONE PAGE ---
+        if (cursor.statusIndex >= cursor.statuses.length) {
+          // Finished all statuses
+          await updateJob({
             status: 'completed',
             completed_at: new Date().toISOString(),
+            cursor,
           });
 
-          // Update account last sync time
           await supabase
             .from('marketplace_accounts')
             .update({ updated_at: new Date().toISOString() })
             .eq('id', account_id);
 
+          console.log('Sync complete. Total items:', cursor.totalFetched);
+          return new Response(
+            JSON.stringify({ success: true, job_id: jobId, done: true, synced: cursor.totalFetched }),
+            { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+
+        const currentStatus = cursor.statuses[cursor.statusIndex];
+
+        // Build endpoint
+        let endpoint = `/users/${mlUserId}/items/search?status=${currentStatus}&offset=${cursor.offset}&limit=${LIMIT}&sort=date_created_desc`;
+        if (cursor.dateEnd) {
+          endpoint += `&date_created_to=${encodeURIComponent(cursor.dateEnd)}`;
+        }
+
+        console.log(`Fetching: ${currentStatus} offset=${cursor.offset} dateEnd=${cursor.dateEnd || 'none'}`);
+
+        let searchResult;
+        try {
+          searchResult = await mlApiCall(endpoint, accessToken, {}, retryContext);
         } catch (error) {
-          console.error('Background sync error:', error);
-          const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-          await updateJobProgress({ 
-            status: 'error',
-            error_message: errorMessage,
+          console.error('Error fetching items page:', error);
+          await updateJob({ cursor, error_message: String(error) });
+          return new Response(
+            JSON.stringify({ error: String(error), job_id: jobId }),
+            { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+
+        const ids: string[] = searchResult.results || [];
+        const paging = searchResult.paging || {};
+        console.log(`Got ${ids.length} items (total in status: ${paging.total || 0})`);
+
+        // Fetch item details
+        const items: any[] = [];
+        let oldestDate: string | null = null;
+
+        for (let i = 0; i < ids.length; i += 20) {
+          const batch = ids.slice(i, i + 20);
+          try {
+            const itemsResp = await mlApiCall(
+              `/items?ids=${batch.join(',')}&attributes=id,title,price,status,date_created,thumbnail,pictures`,
+              accessToken,
+              {},
+              retryContext
+            );
+            for (const itemData of itemsResp) {
+              if (itemData.code === 200 && itemData.body) {
+                items.push(itemData.body);
+                if (itemData.body.date_created) {
+                  if (!oldestDate || itemData.body.date_created < oldestDate) {
+                    oldestDate = itemData.body.date_created;
+                  }
+                }
+              }
+            }
+          } catch (err) {
+            console.error('Error fetching item details:', err);
+          }
+          await new Promise(r => setTimeout(r, 100)); // rate limit delay
+        }
+
+        // Upsert items into DB
+        if (items.length > 0) {
+          const upsertData = items.map(item => {
+            const imageUrl = item.pictures?.[0]?.url || item.pictures?.[0]?.secure_url || item.thumbnail || null;
+            let mappedStatus: 'active' | 'paused' | 'sold' = 'paused';
+            if (item.status === 'active') mappedStatus = 'active';
+            else if (item.status === 'closed') mappedStatus = 'sold';
+
+            return {
+              marketplace_account_id: account_id,
+              external_id: item.id,
+              titulo: (item.title || 'Sem título').substring(0, 255),
+              preco: item.price || 0,
+              status: mappedStatus,
+              part_id: null,
+              last_sync: new Date().toISOString(),
+              image_url: imageUrl,
+            };
+          });
+
+          const { error: upsertError } = await supabase
+            .from('marketplace_listings')
+            .upsert(upsertData, { onConflict: 'marketplace_account_id,external_id', ignoreDuplicates: false });
+
+          if (upsertError) {
+            console.error('Upsert error:', upsertError.message);
+          }
+        }
+
+        cursor.totalFetched += items.length;
+
+        // Update progress
+        await updateJob({
+          total_items: cursor.totalFetched,
+          processed_items: cursor.totalFetched,
+          imported_items: cursor.totalFetched,
+          cursor,
+        });
+
+        // Decide next page
+        if (ids.length < LIMIT) {
+          // No more items in current date range
+          if (!oldestDate || oldestDate === cursor.dateEnd) {
+            cursor.emptyPagesInARow++;
+          } else {
+            cursor.emptyPagesInARow = 0;
+          }
+
+          if (cursor.emptyPagesInARow >= MAX_EMPTY || ids.length === 0) {
+            // Move to next status
+            cursor.statusIndex++;
+            cursor.offset = 0;
+            cursor.dateEnd = null;
+            cursor.emptyPagesInARow = 0;
+            console.log(`Moving to next status index: ${cursor.statusIndex}`);
+          } else if (oldestDate && oldestDate !== cursor.dateEnd) {
+            // Move date window back
+            cursor.dateEnd = oldestDate;
+            cursor.offset = 0;
+          }
+        } else {
+          // More items in current date window
+          cursor.offset += LIMIT;
+          if (cursor.offset >= 1000) {
+            // ML offset limit, shift date window
+            if (oldestDate) {
+              cursor.dateEnd = oldestDate;
+            }
+            cursor.offset = 0;
+          }
+        }
+
+        // Save cursor
+        await updateJob({ cursor });
+
+        const done = cursor.statusIndex >= cursor.statuses.length;
+
+        if (done) {
+          await updateJob({
+            status: 'completed',
             completed_at: new Date().toISOString(),
           });
+
+          await supabase
+            .from('marketplace_accounts')
+            .update({ updated_at: new Date().toISOString() })
+            .eq('id', account_id);
         }
+
+        return new Response(
+          JSON.stringify({
+            success: true,
+            job_id: jobId,
+            done,
+            synced: cursor.totalFetched,
+            has_more: !done,
+          }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+
+      } catch (error) {
+        console.error('sync_all error:', error);
+        const errMsg = error instanceof Error ? error.message : String(error);
+        await updateJob({ status: 'error', error_message: errMsg, completed_at: new Date().toISOString() });
+        return new Response(
+          JSON.stringify({ error: errMsg, job_id: jobId }),
+          { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
       }
-
-      // Start background task and return immediately
-      (globalThis as any).EdgeRuntime.waitUntil(performSync());
-
-      return new Response(
-        JSON.stringify({ 
-          success: true, 
-          job_id: jobId,
-          message: 'Sincronização iniciada em segundo plano.'
-        }),
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
     }
 
-    // Get ML categories
+    // ===== GET CATEGORIES =====
     if (action === 'get_categories') {
       const categories = await mlApiCall('/sites/MLB/categories', accessToken);
       return new Response(
