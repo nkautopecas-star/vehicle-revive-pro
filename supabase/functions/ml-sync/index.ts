@@ -12,7 +12,7 @@ const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 const ML_API_URL = 'https://api.mercadolibre.com';
 
 // Helper to make authenticated ML API calls
-async function mlApiCall(endpoint: string, accessToken: string, options: RequestInit = {}) {
+async function mlApiCall(endpoint: string, accessToken: string, options: RequestInit = {}): Promise<any> {
   const response = await fetch(`${ML_API_URL}${endpoint}`, {
     ...options,
     headers: {
@@ -24,6 +24,38 @@ async function mlApiCall(endpoint: string, accessToken: string, options: Request
   
   if (!response.ok) {
     const error = await response.text();
+    // Parse error to provide better messages
+    let parsedError;
+    try {
+      parsedError = JSON.parse(error);
+    } catch {
+      throw new Error(`ML API error: ${response.status} - ${error}`);
+    }
+
+    // Check for specific error codes and provide user-friendly messages
+    const causes = parsedError.cause || [];
+    const errorMessages: string[] = [];
+    let requiresPictures = false;
+
+    for (const cause of causes) {
+      if (cause.code === 'item.listing_type_id.requiresPictures') {
+        requiresPictures = true;
+        errorMessages.push('O Mercado Livre exige pelo menos uma foto para anunciar nesta categoria. Adicione fotos à peça antes de publicar.');
+      } else if (cause.code === 'item.attributes.missing_required') {
+        errorMessages.push(`Atributos obrigatórios faltando: ${cause.message}`);
+      } else if (cause.type === 'error') {
+        errorMessages.push(cause.message || cause.code);
+      }
+    }
+
+    if (requiresPictures) {
+      throw new Error(`PICTURES_REQUIRED: ${errorMessages.join(' | ')}`);
+    }
+
+    if (errorMessages.length > 0) {
+      throw new Error(`ML_VALIDATION: ${errorMessages.join(' | ')}`);
+    }
+
     throw new Error(`ML API error: ${response.status} - ${error}`);
   }
   
@@ -149,23 +181,30 @@ serve(async (req) => {
         },
       ];
 
-      // Add BRAND if available from compatibilities
+      // Add BRAND - REQUIRED for category MLB439572
+      let brandValue = 'Genérica'; // Default value
       if (part.part_compatibilities?.length > 0) {
         const marca = part.part_compatibilities[0].marca;
         if (marca) {
-          attributes.push({
-            id: 'BRAND',
-            value_name: marca,
-          });
+          brandValue = marca;
         }
       } else if (part.vehicles?.marca) {
-        attributes.push({
-          id: 'BRAND',
-          value_name: part.vehicles.marca,
-        });
+        brandValue = part.vehicles.marca;
       }
+      attributes.push({
+        id: 'BRAND',
+        value_name: brandValue,
+      });
 
-      // Add OEM_CODE if available
+      // Add PART_NUMBER - REQUIRED for category MLB439572
+      // Use codigo_oem if available, otherwise use codigo_interno or generate one
+      let partNumber = part.codigo_oem || part.codigo_interno || `INT-${part_id.substring(0, 8).toUpperCase()}`;
+      attributes.push({
+        id: 'PART_NUMBER',
+        value_name: partNumber,
+      });
+
+      // Add ALPHANUMERIC_OEM if codigo_oem is available
       if (part.codigo_oem) {
         attributes.push({
           id: 'ALPHANUMERIC_OEM',
@@ -188,6 +227,10 @@ serve(async (req) => {
       }
 
       // Create ML listing data
+      // Determine listing type: gold_special requires pictures, gold_pro does not
+      const hasPictures = part.part_images && part.part_images.length > 0;
+      const listingTypeId = hasPictures ? 'gold_special' : 'gold_pro';
+
       const mlListing = {
         family_name: familyName,
         category_id: listing_data?.category_id || 'MLB439572', // Default: Bombas de Combustível
@@ -195,7 +238,7 @@ serve(async (req) => {
         currency_id: 'BRL',
         available_quantity: part.quantidade,
         buying_mode: 'buy_it_now',
-        listing_type_id: (part.part_images?.length > 0) ? 'gold_special' : 'free', // Free if no images
+        listing_type_id: listingTypeId, // gold_pro if no pictures, gold_special if has pictures
         description: { plain_text: description },
         attributes,
         pictures: part.part_images

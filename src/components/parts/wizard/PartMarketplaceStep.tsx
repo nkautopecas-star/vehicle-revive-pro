@@ -26,6 +26,7 @@ import type { MarketplaceAccountSelection } from "../PartFormWizard";
  import { usePartCompatibilities } from "@/hooks/usePartCompatibilities";
  import { Alert, AlertDescription } from "@/components/ui/alert";
  import { CompatibilityInlineForm, type CompatibilityEntry } from "./CompatibilityInlineForm";
+import { usePartImages } from "@/hooks/usePartImages";
  
  interface Category {
    id: string;
@@ -117,6 +118,11 @@ const CATEGORY_SUGGESTIONS: Record<string, string> = {
    const { accounts: mlAccounts = [] } = useMercadoLivre();
   const activeMLAccounts = mlAccounts?.filter(acc => acc.status === 'active') || [];
   const hasActiveMLAccount = activeMLAccounts.length > 0;
+
+  // Check if part has images (only for editing existing parts)
+  const { data: existingImages = [] } = usePartImages(part?.id);
+  const isNewPart = !part?.id;
+  const hasImages = isNewPart ? false : existingImages.length > 0;
 
   // Auto-select first account if only one is available
   const selectedMLAccountId = accountSelection.mercadolivre_account_id || 
@@ -418,6 +424,19 @@ const CATEGORY_SUGGESTIONS: Record<string, string> = {
               )}
             </CardContent>
           </Card>
+
+        {/* Warning about required photos */}
+        {!hasImages && (
+          <Alert variant="default" className="bg-warning/10 border-warning/30">
+            <AlertCircle className="h-4 w-4 text-warning" />
+            <AlertDescription className="text-warning-foreground">
+              <strong>Atenção:</strong> O Mercado Livre exige pelo menos uma foto para publicar anúncios em categorias de autopeças. 
+              {isNewPart 
+                ? " Após cadastrar a peça, adicione fotos antes de tentar publicar no ML."
+                : " Adicione fotos à peça para poder publicar no Mercado Livre."}
+            </AlertDescription>
+          </Alert>
+        )}
 
          {/* Compatibility Form */}
          <CompatibilityInlineForm
