@@ -300,6 +300,9 @@
            compatibilities={newCompatibilities}
            onAdd={handleAddCompatibility}
            onRemove={handleRemoveCompatibility}
+           partName={formData.nome}
+           vehicleInfo={part?.veiculo_info}
+           categoryName={categoryName}
          />
  
              {/* ML-specific info preview */}
