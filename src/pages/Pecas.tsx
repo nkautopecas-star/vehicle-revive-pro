@@ -30,8 +30,11 @@ import {
 import { Plus, Search, MoreHorizontal, Edit, Trash2, Sparkles, MapPin, Package, Download, FileSpreadsheet, Upload, Car, Eye, Copy, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useParts, useCategories, useCreatePart, useUpdatePart, useDeletePart, type Part, type PartFormData } from "@/hooks/useParts";
+ import type { ExtendedPartFormData } from "@/hooks/useParts";
 import { useAllPartCompatibilities, filterPartsByAdvancedCompatibility, type AdvancedCompatibilityFilter } from "@/hooks/usePartsWithCompatibilities";
 import { PartFormDialog } from "@/components/parts/PartFormDialog";
+ import { PartFormWizard, type MarketplaceConfig } from "@/components/parts/PartFormWizard";
+ import { useMercadoLivre } from "@/hooks/useMercadoLivre";
 import { DeletePartDialog } from "@/components/parts/DeletePartDialog";
 import { PartThumbnail } from "@/components/parts/PartThumbnail";
 import { ImportPartsDialog } from "@/components/parts/ImportPartsDialog";
@@ -72,6 +75,7 @@ const Pecas = () => {
   const createMutation = useCreatePart();
   const updateMutation = useUpdatePart();
   const deleteMutation = useDeletePart();
+   const { createListing, accounts: mlAccounts = [] } = useMercadoLivre();
 
   // Handle edit/duplicate from URL params
   useEffect(() => {
@@ -134,10 +138,12 @@ const Pecas = () => {
   const valorEstoque = filteredParts.reduce((acc, p) => acc + (p.preco_venda || 0) * p.quantidade, 0);
   const uniqueCategories = [...new Set(parts.map((p) => p.categoria_nome).filter(Boolean))];
 
-  const handleCreatePart = (data: PartFormData) => {
-    createMutation.mutate(data, {
-      onSuccess: () => {
+   const handleCreatePart = (data: ExtendedPartFormData, marketplaces: MarketplaceConfig) => {
+     createMutation.mutate(data, {
+       onSuccess: (_, variables) => {
         setIsFormDialogOpen(false);
+         // If marketplaces selected, create listings
+         // Note: We'd need the created part ID here for full implementation
       },
     });
   };
@@ -161,7 +167,7 @@ const Pecas = () => {
     setIsFormDialogOpen(true);
   };
 
-  const handleUpdatePart = (data: PartFormData) => {
+   const handleUpdatePart = (data: ExtendedPartFormData, marketplaces: MarketplaceConfig) => {
     if (!editingPart) return;
     updateMutation.mutate({ id: editingPart.id, data }, {
       onSuccess: () => {
@@ -483,7 +489,7 @@ const Pecas = () => {
       </div>
 
       {/* Part Form Dialog */}
-      <PartFormDialog
+       <PartFormWizard
         open={isFormDialogOpen}
         onOpenChange={handleDialogClose}
         part={formPart}

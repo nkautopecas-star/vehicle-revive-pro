@@ -24,6 +24,10 @@ export interface Part {
   preco_venda: number | null;
   observacoes: string | null;
   status: PartStatus;
+   peso_gramas: number | null;
+   comprimento_cm: number | null;
+   largura_cm: number | null;
+   altura_cm: number | null;
   user_id: string;
   created_at: string;
   updated_at: string;
@@ -43,6 +47,13 @@ export interface PartFormData {
   preco_venda?: number;
   observacoes?: string;
   status?: PartStatus;
+ }
+ 
+ export interface ExtendedPartFormData extends PartFormData {
+   peso_gramas?: number;
+   comprimento_cm?: number;
+   largura_cm?: number;
+   altura_cm?: number;
 }
 
 export function useParts() {
@@ -68,6 +79,10 @@ export function useParts() {
         veiculo_info: part.vehicles 
           ? `${part.vehicles.marca} ${part.vehicles.modelo} ${part.vehicles.ano} - ${part.vehicles.placa}`
           : null,
+         peso_gramas: part.peso_gramas || null,
+         comprimento_cm: part.comprimento_cm || null,
+         largura_cm: part.largura_cm || null,
+         altura_cm: part.altura_cm || null,
       }));
     },
   });
@@ -117,7 +132,7 @@ export function useCreatePart() {
   const { user } = useAuth();
 
   return useMutation({
-    mutationFn: async (data: PartFormData) => {
+     mutationFn: async (data: ExtendedPartFormData) => {
       if (!user) throw new Error('Usuário não autenticado');
 
       const { error } = await supabase
@@ -137,6 +152,10 @@ export function useCreatePart() {
           observacoes: data.observacoes || null,
           status: data.status || 'ativa',
           user_id: user.id,
+           peso_gramas: data.peso_gramas || null,
+           comprimento_cm: data.comprimento_cm || null,
+           largura_cm: data.largura_cm || null,
+           altura_cm: data.altura_cm || null,
         });
 
       if (error) {
@@ -158,7 +177,7 @@ export function useUpdatePart() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: async ({ id, data }: { id: string; data: Partial<PartFormData> }) => {
+     mutationFn: async ({ id, data }: { id: string; data: Partial<ExtendedPartFormData> }) => {
       const { error } = await supabase
         .from('parts')
         .update({
@@ -175,6 +194,10 @@ export function useUpdatePart() {
           preco_venda: data.preco_venda || null,
           observacoes: data.observacoes || null,
           status: data.status,
+           peso_gramas: data.peso_gramas || null,
+           comprimento_cm: data.comprimento_cm || null,
+           largura_cm: data.largura_cm || null,
+           altura_cm: data.altura_cm || null,
         })
         .eq('id', id);
 

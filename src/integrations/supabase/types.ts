@@ -253,15 +253,19 @@ export type Database = {
       }
       parts: {
         Row: {
+          altura_cm: number | null
           categoria_id: string | null
           codigo_interno: string | null
           codigo_oem: string | null
+          comprimento_cm: number | null
           condicao: Database["public"]["Enums"]["part_condition"]
           created_at: string
           id: string
+          largura_cm: number | null
           localizacao: string | null
           nome: string
           observacoes: string | null
+          peso_gramas: number | null
           preco_custo: number | null
           preco_venda: number | null
           quantidade: number
@@ -272,15 +276,19 @@ export type Database = {
           vehicle_id: string | null
         }
         Insert: {
+          altura_cm?: number | null
           categoria_id?: string | null
           codigo_interno?: string | null
           codigo_oem?: string | null
+          comprimento_cm?: number | null
           condicao?: Database["public"]["Enums"]["part_condition"]
           created_at?: string
           id?: string
+          largura_cm?: number | null
           localizacao?: string | null
           nome: string
           observacoes?: string | null
+          peso_gramas?: number | null
           preco_custo?: number | null
           preco_venda?: number | null
           quantidade?: number
@@ -291,15 +299,19 @@ export type Database = {
           vehicle_id?: string | null
         }
         Update: {
+          altura_cm?: number | null
           categoria_id?: string | null
           codigo_interno?: string | null
           codigo_oem?: string | null
+          comprimento_cm?: number | null
           condicao?: Database["public"]["Enums"]["part_condition"]
           created_at?: string
           id?: string
+          largura_cm?: number | null
           localizacao?: string | null
           nome?: string
           observacoes?: string | null
+          peso_gramas?: number | null
           preco_custo?: number | null
           preco_venda?: number | null
           quantidade?: number
