@@ -21,8 +21,43 @@ export interface PartSuggestion {
   compatibilidades?: CompatibilitySuggestion[];
 }
 
-// Cache global para sugestões de OEM
-const suggestionCache = new Map<string, PartSuggestion>();
+const CACHE_KEY = "oem-suggestions-cache";
+const CACHE_EXPIRY_DAYS = 7;
+
+// Load cache from localStorage
+function loadCache(): Map<string, { suggestion: PartSuggestion; timestamp: number }> {
+  try {
+    const stored = localStorage.getItem(CACHE_KEY);
+    if (stored) {
+      const parsed = JSON.parse(stored);
+      const now = Date.now();
+      const expiryMs = CACHE_EXPIRY_DAYS * 24 * 60 * 60 * 1000;
+      
+      // Filter out expired entries
+      const validEntries = Object.entries(parsed).filter(
+        ([_, value]: [string, any]) => now - value.timestamp < expiryMs
+      );
+      
+      return new Map(validEntries as [string, { suggestion: PartSuggestion; timestamp: number }][]);
+    }
+  } catch (e) {
+    console.warn("Failed to load OEM suggestion cache:", e);
+  }
+  return new Map();
+}
+
+// Save cache to localStorage
+function saveCache(cache: Map<string, { suggestion: PartSuggestion; timestamp: number }>) {
+  try {
+    const obj = Object.fromEntries(cache);
+    localStorage.setItem(CACHE_KEY, JSON.stringify(obj));
+  } catch (e) {
+    console.warn("Failed to save OEM suggestion cache:", e);
+  }
+}
+
+// Global cache with localStorage persistence
+const suggestionCache = loadCache();
 
 export function useSuggestPartInfo() {
   const [isLoading, setIsLoading] = useState(false);
@@ -44,8 +79,8 @@ export function useSuggestPartInfo() {
     const cached = suggestionCache.get(cacheKey);
     if (cached) {
       console.log("Using cached suggestion for OEM:", codigoOEM);
-      setSuggestion(cached);
-      return cached;
+      setSuggestion(cached.suggestion);
+      return cached.suggestion;
     }
 
     setIsLoading(true);
@@ -73,8 +108,9 @@ export function useSuggestPartInfo() {
         return null;
       }
 
-      // Salvar no cache
-      suggestionCache.set(cacheKey, data);
+      // Salvar no cache com timestamp
+      suggestionCache.set(cacheKey, { suggestion: data, timestamp: Date.now() });
+      saveCache(suggestionCache);
       console.log("Cached suggestion for OEM:", codigoOEM);
       
       setSuggestion(data);
