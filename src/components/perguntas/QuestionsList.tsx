@@ -1,14 +1,16 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
-import { Search, MessageSquare, Clock, CheckCheck } from "lucide-react";
+import { Search, MessageSquare, Clock, CheckCheck, RefreshCw } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import type { MarketplaceQuestion } from "@/hooks/useMarketplaceQuestions";
+import { useFetchQuestions } from "@/hooks/useFetchQuestions";
 
 const marketplaceConfig = {
   mercadolivre: { label: "Mercado Livre", color: "bg-yellow-500/20 text-yellow-500" },
@@ -41,6 +43,8 @@ export function QuestionsList({
   onShowActiveOnlyChange,
   showPendingBadge = true,
 }: QuestionsListProps) {
+  const fetchQuestions = useFetchQuestions();
+
   return (
     <Card className="flex-1 flex flex-col overflow-hidden">
       <CardHeader className="pb-3 shrink-0">
@@ -54,6 +58,15 @@ export function QuestionsList({
               </Badge>
             )}
           </CardTitle>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => fetchQuestions.mutate()}
+            disabled={fetchQuestions.isPending}
+            title="Atualizar perguntas do Mercado Livre"
+          >
+            <RefreshCw className={cn("w-4 h-4", fetchQuestions.isPending && "animate-spin")} />
+          </Button>
         </div>
         <div className="space-y-3">
           <div className="relative">
