@@ -41,7 +41,7 @@ import { ImageUploadProgressDialog } from "@/components/parts/ImageUploadProgres
 import { useUploadPartImage } from "@/hooks/usePartImages";
 import { useMercadoLivre } from "@/hooks/useMercadoLivre";
 import { DeletePartDialog } from "@/components/parts/DeletePartDialog";
-import { PartThumbnail } from "@/components/parts/PartThumbnail";
+import { PartThumbnailWithGallery } from "@/components/parts/PartThumbnailWithGallery";
 import { ImportPartsDialog } from "@/components/parts/ImportPartsDialog";
 import { CompatibilityFilterDialog, type CompatibilityFilter } from "@/components/parts/CompatibilityFilterDialog";
 import { exportToCSV, exportToExcel } from "@/utils/exportUtils";
@@ -685,7 +685,7 @@ const Pecas = () => {
                       </TableCell>
                       <TableCell>
                         <Link to={`/pecas/${part.id}`} className="flex items-center gap-3 hover:opacity-80 transition-opacity">
-                          <PartThumbnail partId={part.id} partName={part.nome} />
+                          <PartThumbnailWithGallery partId={part.id} partName={part.nome} />
                           <div>
                             <div className="flex items-center gap-2">
                               <p className="font-medium hover:text-primary transition-colors">{part.nome}</p>
