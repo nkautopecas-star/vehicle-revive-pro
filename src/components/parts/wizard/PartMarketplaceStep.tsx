@@ -16,7 +16,7 @@
    SelectValue,
  } from "@/components/ui/select";
  import { ChevronLeft, Loader2, Package, Scale, Ruler, Info } from "lucide-react";
- import { Car, Calendar, AlertCircle } from "lucide-react";
+import { Car, Calendar, AlertCircle, Tag } from "lucide-react";
  import type { ExtendedPartFormData, MarketplaceConfig, NewCompatibility } from "../PartFormWizard";
 import type { MarketplaceAccountSelection } from "../PartFormWizard";
  import type { Part } from "@/hooks/useParts";
@@ -51,16 +51,49 @@ import type { MarketplaceAccountSelection } from "../PartFormWizard";
   setAccountSelection: (selection: MarketplaceAccountSelection) => void;
  }
  
- // ML Category mapping based on internal categories
- const ML_CATEGORY_SUGGESTIONS: Record<string, string> = {
-   "Motor": "MLB1747 - Peças para Motor",
-   "Suspensão": "MLB1754 - Suspensão e Direção",
-   "Freios": "MLB1755 - Freios",
-   "Injeção": "MLB1756 - Injeção Eletrônica",
-   "Transmissão": "MLB1750 - Câmbio e Transmissão",
-   "Elétrica": "MLB1751 - Parte Elétrica",
-   "Carroceria": "MLB1752 - Carroceria e Estrutura",
-   "Interior": "MLB1753 - Interior e Acessórios",
+// ML Categories for Autoparts (MLB = Mercado Libre Brazil)
+const ML_CATEGORIES = [
+  { id: "MLB1747", name: "Autopeças (Geral)" },
+  { id: "MLB1748", name: "Motor e Componentes" },
+  { id: "MLB1749", name: "Arrefecimento" },
+  { id: "MLB1750", name: "Câmbio e Transmissão" },
+  { id: "MLB1751", name: "Parte Elétrica" },
+  { id: "MLB1752", name: "Carroceria e Estrutura" },
+  { id: "MLB1753", name: "Interior e Acessórios" },
+  { id: "MLB1754", name: "Suspensão e Direção" },
+  { id: "MLB1755", name: "Freios" },
+  { id: "MLB1756", name: "Injeção Eletrônica" },
+  { id: "MLB1757", name: "Escapamento" },
+  { id: "MLB1758", name: "Combustível" },
+  { id: "MLB1759", name: "Embreagem" },
+  { id: "MLB1760", name: "Ignição" },
+  { id: "MLB1761", name: "Vidros e Retrovisores" },
+  { id: "MLB1762", name: "Faróis e Lanternas" },
+  { id: "MLB1763", name: "Ar Condicionado Automotivo" },
+  { id: "MLB1764", name: "Rodas e Pneus" },
+];
+
+// Category suggestion based on internal category name
+const CATEGORY_SUGGESTIONS: Record<string, string> = {
+  "Motor": "MLB1748",
+  "Suspensão": "MLB1754",
+  "Freios": "MLB1755",
+  "Injeção": "MLB1756",
+  "Transmissão": "MLB1750",
+  "Elétrica": "MLB1751",
+  "Carroceria": "MLB1752",
+  "Interior": "MLB1753",
+  "Arrefecimento": "MLB1749",
+  "Escapamento": "MLB1757",
+  "Combustível": "MLB1758",
+  "Embreagem": "MLB1759",
+  "Ignição": "MLB1760",
+  "Vidros": "MLB1761",
+  "Faróis": "MLB1762",
+  "Lanternas": "MLB1762",
+  "Ar Condicionado": "MLB1763",
+  "Rodas": "MLB1764",
+  "Pneus": "MLB1764",
  };
  
  export function PartMarketplaceStep({
@@ -88,6 +121,14 @@ import type { MarketplaceAccountSelection } from "../PartFormWizard";
   // Auto-select first account if only one is available
   const selectedMLAccountId = accountSelection.mercadolivre_account_id || 
     (activeMLAccounts.length === 1 ? activeMLAccounts[0].id : undefined);
+
+  // Get category name for ML suggestion
+  const categoryName = categories.find(c => c.id === formData.categoria_id)?.name || "";
+  const suggestedCategoryId = CATEGORY_SUGGESTIONS[categoryName] || "MLB1747";
+  
+  // Selected category (use suggestion if not manually selected)
+  const selectedCategoryId = accountSelection.mercadolivre_category_id || suggestedCategoryId;
+  const selectedCategory = ML_CATEGORIES.find(c => c.id === selectedCategoryId);
  
    // Fetch existing compatibilities for the part
    const { data: compatibilities = [] } = usePartCompatibilities(part?.id || partId);
@@ -127,10 +168,6 @@ import type { MarketplaceAccountSelection } from "../PartFormWizard";
    const handleRemoveCompatibility = (id: string) => {
      setNewCompatibilities(newCompatibilities.filter(c => c.id !== id));
    };
- 
-   // Get category name for ML suggestion
-   const categoryName = categories.find(c => c.id === formData.categoria_id)?.name || "";
-   const suggestedMLCategory = ML_CATEGORY_SUGGESTIONS[categoryName] || "";
  
    const hasAnyMarketplaceSelected = marketplaces.mercadolivre || marketplaces.olx || marketplaces.shopee;
  
@@ -339,6 +376,49 @@ import type { MarketplaceAccountSelection } from "../PartFormWizard";
                </CardContent>
              </Card>
  
+          {/* ML Category Selection */}
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base flex items-center gap-2">
+                <Tag className="w-4 h-4" />
+                Categoria no Mercado Livre
+              </CardTitle>
+              <CardDescription>
+                Selecione a categoria mais adequada para sua peça
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <Select
+                value={selectedCategoryId}
+                onValueChange={(value) => 
+                  setAccountSelection({ ...accountSelection, mercadolivre_category_id: value })
+                }
+              >
+                <SelectTrigger className="w-full">
+                  <SelectValue placeholder="Selecione a categoria" />
+                </SelectTrigger>
+                <SelectContent>
+                  {ML_CATEGORIES.map((cat) => (
+                    <SelectItem key={cat.id} value={cat.id}>
+                      <span className="flex items-center gap-2">
+                        <span className="text-muted-foreground text-xs font-mono">{cat.id}</span>
+                        <span>{cat.name}</span>
+                        {cat.id === suggestedCategoryId && (
+                          <Badge variant="secondary" className="text-xs ml-1">Sugerido</Badge>
+                        )}
+                      </span>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {categoryName && suggestedCategoryId !== "MLB1747" && (
+                <p className="text-xs text-muted-foreground mt-2">
+                  Sugestão baseada na categoria "{categoryName}" do seu estoque
+                </p>
+              )}
+            </CardContent>
+          </Card>
+
          {/* Compatibility Form */}
          <CompatibilityInlineForm
            compatibilities={newCompatibilities}
@@ -373,8 +453,10 @@ import type { MarketplaceAccountSelection } from "../PartFormWizard";
                      </p>
                    </div>
                    <div>
-                     <span className="text-muted-foreground">Categoria sugerida:</span>
-                     <p className="font-medium">{suggestedMLCategory || "Selecionar categoria"}</p>
+                      <span className="text-muted-foreground">Categoria:</span>
+                      <p className="font-medium">
+                        {selectedCategory ? `${selectedCategory.id} - ${selectedCategory.name}` : "Selecionar"}
+                      </p>
                    </div>
                    <div>
                      <span className="text-muted-foreground">Condição:</span>
