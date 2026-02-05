@@ -1,3 +1,4 @@
+import { useState, useEffect, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -14,12 +15,15 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { ChevronRight } from "lucide-react";
+import { ChevronRight, Sparkles, Loader2, Check, X } from "lucide-react";
 import type { ExtendedPartFormData } from "../PartFormWizard";
 import type { Part } from "@/hooks/useParts";
 import { PartImageUpload } from "../PartImageUpload";
 import { PartCompatibilities } from "../PartCompatibilities";
 import { WizardImageUpload, type PendingImage } from "../WizardImageUpload";
+import { useSuggestPartInfo, type PartSuggestion } from "@/hooks/useSuggestPartInfo";
+import { Badge } from "@/components/ui/badge";
+import { cn } from "@/lib/utils";
  
  interface Category {
    id: string;
@@ -30,7 +34,7 @@ import { WizardImageUpload, type PendingImage } from "../WizardImageUpload";
    id: string;
    label: string;
  }
- 
+
 interface PartBasicInfoStepProps {
   formData: ExtendedPartFormData;
   setFormData: (data: ExtendedPartFormData) => void;
@@ -60,17 +64,64 @@ export function PartBasicInfoStep({
   pendingImages,
   onPendingImagesChange,
 }: PartBasicInfoStepProps) {
-   const dialogTitle = isDuplicating
-     ? "Duplicar Peça"
-     : isEditing
-     ? "Editar Peça"
-     : "Cadastrar Peça";
+  const [showSuggestion, setShowSuggestion] = useState(false);
+  const { isLoading: isSuggesting, suggestion, suggestFromOEM, clearSuggestion } = useSuggestPartInfo();
+
+  const dialogTitle = isDuplicating
+    ? "Duplicar Peça"
+    : isEditing
+    ? "Editar Peça"
+    : "Cadastrar Peça";
  
-   const dialogDescription = isDuplicating
-     ? "Crie uma nova peça baseada nos dados existentes."
-     : isEditing
-     ? "Atualize os dados da peça."
-     : "Preencha os dados da peça para adicionar ao estoque.";
+  const dialogDescription = isDuplicating
+    ? "Crie uma nova peça baseada nos dados existentes."
+    : isEditing
+    ? "Atualize os dados da peça."
+    : "Preencha os dados da peça para adicionar ao estoque.";
+
+  // Get vehicle info for context
+  const selectedVehicle = vehicles.find(v => v.id === formData.vehicle_id);
+  const vehicleInfo = selectedVehicle?.label;
+
+  // Get category name for context
+  const selectedCategory = categories.find(c => c.id === formData.categoria_id);
+  const categoryName = selectedCategory?.name;
+
+  // Handle OEM blur to suggest part info
+  const handleOEMBlur = useCallback(async () => {
+    if (formData.codigo_oem && formData.codigo_oem.trim().length >= 3 && !formData.nome) {
+      const result = await suggestFromOEM(formData.codigo_oem, vehicleInfo, categoryName);
+      if (result) {
+        setShowSuggestion(true);
+      }
+    }
+  }, [formData.codigo_oem, formData.nome, suggestFromOEM, vehicleInfo, categoryName]);
+
+  // Apply suggestion
+  const applySuggestion = useCallback((s: PartSuggestion) => {
+    setFormData({
+      ...formData,
+      nome: s.nome,
+      preco_venda: s.precoSugerido,
+      preco_custo: s.precoMinimo ? Math.round(s.precoMinimo * 0.6) : undefined,
+    });
+    setShowSuggestion(false);
+    clearSuggestion();
+  }, [formData, setFormData, clearSuggestion]);
+
+  const dismissSuggestion = useCallback(() => {
+    setShowSuggestion(false);
+    clearSuggestion();
+  }, [clearSuggestion]);
+
+  const getConfiancaColor = (confianca: string) => {
+    switch (confianca) {
+      case "alta": return "bg-success/20 text-success";
+      case "media": return "bg-warning/20 text-warning";
+      case "baixa": return "bg-destructive/20 text-destructive";
+      default: return "";
+    }
+  };
  
    return (
      <>
@@ -80,6 +131,101 @@ export function PartBasicInfoStep({
        </DialogHeader>
  
        <div className="grid gap-4 py-4">
+         {/* OEM Code - First field */}
+         <div className="grid grid-cols-2 gap-4">
+           <div className="space-y-2">
+             <Label htmlFor="codigoOEM" className="flex items-center gap-2">
+               Código OEM
+               {isSuggesting && <Loader2 className="w-3 h-3 animate-spin text-primary" />}
+             </Label>
+             <Input
+               id="codigoOEM"
+               placeholder="11000-PNB-A00"
+               value={formData.codigo_oem}
+               onChange={(e) =>
+                 setFormData({ ...formData, codigo_oem: e.target.value })
+               }
+               onBlur={handleOEMBlur}
+             />
+           </div>
+           <div className="space-y-2">
+             <Label htmlFor="codigoInterno">Código Interno</Label>
+             <Input
+               id="codigoInterno"
+               placeholder="MOT-001"
+               value={formData.codigo_interno}
+               onChange={(e) =>
+                 setFormData({ ...formData, codigo_interno: e.target.value })
+               }
+             />
+           </div>
+         </div>
+
+         {/* AI Suggestion Card */}
+         {showSuggestion && suggestion && (
+           <div className="p-4 rounded-lg border border-primary/30 bg-primary/5 space-y-3">
+             <div className="flex items-center justify-between">
+               <div className="flex items-center gap-2">
+                 <Sparkles className="w-4 h-4 text-primary" />
+                 <span className="text-sm font-medium">Sugestão da IA</span>
+                 <Badge className={cn("text-xs", getConfiancaColor(suggestion.confianca))}>
+                   Confiança {suggestion.confianca}
+                 </Badge>
+               </div>
+               <div className="flex gap-1">
+                 <Button
+                   type="button"
+                   size="sm"
+                   variant="ghost"
+                   className="h-7 px-2"
+                   onClick={dismissSuggestion}
+                 >
+                   <X className="w-4 h-4" />
+                 </Button>
+               </div>
+             </div>
+             
+             <div className="grid grid-cols-2 gap-4 text-sm">
+               <div>
+                 <span className="text-muted-foreground">Nome sugerido:</span>
+                 <p className="font-medium">{suggestion.nome}</p>
+               </div>
+               <div>
+                 <span className="text-muted-foreground">Título ML:</span>
+                 <p className="font-medium text-xs">{suggestion.tituloML}</p>
+               </div>
+               <div>
+                 <span className="text-muted-foreground">Preço sugerido:</span>
+                 <p className="font-medium text-primary">
+                   R$ {suggestion.precoSugerido?.toFixed(2)}
+                   {suggestion.precoMinimo && suggestion.precoMaximo && (
+                     <span className="text-xs text-muted-foreground ml-1">
+                       (R$ {suggestion.precoMinimo} - R$ {suggestion.precoMaximo})
+                     </span>
+                   )}
+                 </p>
+               </div>
+               {suggestion.descricao && (
+                 <div className="col-span-2">
+                   <span className="text-muted-foreground">Descrição:</span>
+                   <p className="text-xs">{suggestion.descricao}</p>
+                 </div>
+               )}
+             </div>
+
+             <Button
+               type="button"
+               size="sm"
+               onClick={() => applySuggestion(suggestion)}
+               className="w-full gap-2"
+             >
+               <Check className="w-4 h-4" />
+               Aplicar Sugestão
+             </Button>
+           </div>
+         )}
+
+         {/* Name and Category */}
          <div className="grid grid-cols-2 gap-4">
            <div className="space-y-2">
              <Label htmlFor="nome">Nome da Peça *</Label>
@@ -111,31 +257,6 @@ export function PartBasicInfoStep({
                  ))}
                </SelectContent>
              </Select>
-           </div>
-         </div>
- 
-         <div className="grid grid-cols-2 gap-4">
-           <div className="space-y-2">
-             <Label htmlFor="codigoInterno">Código Interno</Label>
-             <Input
-               id="codigoInterno"
-               placeholder="MOT-001"
-               value={formData.codigo_interno}
-               onChange={(e) =>
-                 setFormData({ ...formData, codigo_interno: e.target.value })
-               }
-             />
-           </div>
-           <div className="space-y-2">
-             <Label htmlFor="codigoOEM">Código OEM</Label>
-             <Input
-               id="codigoOEM"
-               placeholder="11000-PNB-A00"
-               value={formData.codigo_oem}
-               onChange={(e) =>
-                 setFormData({ ...formData, codigo_oem: e.target.value })
-               }
-             />
            </div>
          </div>
  
