@@ -17,6 +17,7 @@
 
 export interface MarketplaceAccountSelection {
   mercadolivre_account_id?: string;
+  mercadolivre_category_id?: string;
 }
  
  export interface PartDimensions {

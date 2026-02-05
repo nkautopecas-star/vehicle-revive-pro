@@ -167,6 +167,8 @@ const Pecas = () => {
                 accountId, 
                 partId,
                 listingData: {
+                  // Pass selected category
+                  category_id: accountSelection.mercadolivre_category_id || 'MLB1747',
                   // Pass shipping dimensions
                   shipping: data.peso_gramas && data.comprimento_cm && data.largura_cm && data.altura_cm ? {
                     dimensions: {
