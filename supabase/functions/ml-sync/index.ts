@@ -109,6 +109,14 @@ serve(async (req) => {
       }
       title = title.substring(0, 60); // ML title limit
 
+      // Build family_name - generic description of the product (max 120 chars)
+      // This is required by the new ML User Products model
+      let familyName = part.nome;
+      if (part.codigo_oem) {
+        familyName = `${part.nome} ${part.codigo_oem}`;
+      }
+      familyName = familyName.substring(0, 120);
+
       // Build description
       let description = `${part.nome}\n\n`;
       if (part.codigo_oem) description += `Código OEM: ${part.codigo_oem}\n`;
@@ -135,6 +143,7 @@ serve(async (req) => {
       // Create ML listing data
       const mlListing = {
         title,
+        family_name: familyName,
         category_id: listing_data?.category_id || 'MLB1747', // Default: Autopeças
         price: part.preco_venda || 100,
         currency_id: 'BRL',
