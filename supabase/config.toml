@@ -3,6 +3,9 @@ project_id = "hkevciajobafqklpmlth"
 [functions.suggest-compatibilities]
 verify_jwt = false
 
+[functions.suggest-part-info]
+verify_jwt = false
+
 [functions.ml-oauth]
 verify_jwt = false
 
