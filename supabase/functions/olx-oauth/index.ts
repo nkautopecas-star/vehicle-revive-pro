@@ -51,7 +51,8 @@ serve(async (req) => {
       }
 
       // OLX uses standard OAuth2 authorization code flow
-      const authUrl = `${OLX_AUTH_URL}?response_type=code&client_id=${OLX_CLIENT_ID}&redirect_uri=${encodeURIComponent(redirectUri)}&scope=basic_user_info autoupload`;
+      const scopes = 'basic_user_info autoupload';
+      const authUrl = `${OLX_AUTH_URL}?response_type=code&client_id=${OLX_CLIENT_ID}&redirect_uri=${encodeURIComponent(redirectUri)}&scope=${encodeURIComponent(scopes)}`;
       
       console.log('Generated OLX auth URL:', authUrl);
       
