@@ -24,6 +24,8 @@ import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
+import { ListingTypeSelector } from "./ListingTypeSelector";
+import { useEnabledListingTypes, calculateListingTypePrice } from "@/hooks/useListingTypeRules";
 
 interface PublishToMLButtonProps {
   partId: string;
@@ -34,10 +36,13 @@ interface PublishToMLButtonProps {
 export function PublishToMLButton({ partId, partName, preco }: PublishToMLButtonProps) {
   const [open, setOpen] = useState(false);
   const [selectedAccountId, setSelectedAccountId] = useState<string>("");
+  const [selectedListingTypes, setSelectedListingTypes] = useState<string[]>([]);
+  const [publishingProgress, setPublishingProgress] = useState<{ current: number; total: number } | null>(null);
   const { toast } = useToast();
   
   const { accounts, isLoadingAccounts, createListing, isCreatingListing } = useMercadoLivre();
   const { data: images = [], isLoading: isLoadingImages } = usePartImages(partId);
+  const { data: listingTypeRules } = useEnabledListingTypes('mercadolivre');
   
   // Check if part is already published
   const { data: existingListings, isLoading: isLoadingListings } = useQuery({
@@ -65,7 +70,8 @@ export function PublishToMLButton({ partId, partName, preco }: PublishToMLButton
   const hasActiveAccounts = activeAccounts.length > 0;
   const hasPrice = preco !== null && preco > 0;
   
-  const canPublish = hasImages && hasActiveAccounts && hasPrice;
+  const hasSelectedTypes = selectedListingTypes.length > 0;
+  const canPublish = hasImages && hasActiveAccounts && hasPrice && hasSelectedTypes;
   
   const handlePublish = async () => {
     if (!selectedAccountId) {
@@ -76,35 +82,94 @@ export function PublishToMLButton({ partId, partName, preco }: PublishToMLButton
       });
       return;
     }
-    
-    try {
-      const result = await createListing({
-        accountId: selectedAccountId,
-        partId,
+
+    if (selectedListingTypes.length === 0) {
+      toast({
+        title: "Selecione ao menos um tipo",
+        description: "Escolha ao menos um tipo de anúncio para criar",
+        variant: "destructive",
       });
+      return;
+    }
+    
+    const successfulListings: { type: string; permalink?: string }[] = [];
+    const failedListings: string[] = [];
+    
+    setPublishingProgress({ current: 0, total: selectedListingTypes.length });
+    
+    // Create listings for each selected type
+    for (let i = 0; i < selectedListingTypes.length; i++) {
+      const listingType = selectedListingTypes[i];
+      const rule = listingTypeRules?.find(r => r.listing_type === listingType);
+      const calculatedPrice = rule && preco 
+        ? calculateListingTypePrice(preco, rule.price_variation_percent)
+        : preco;
       
-      if (result.success && result.permalink) {
-        toast({
-          title: "Anúncio criado com sucesso!",
-          description: (
-            <div className="flex flex-col gap-2">
-              <span>Sua peça foi publicada no Mercado Livre.</span>
-              <a 
-                href={result.permalink} 
-                target="_blank" 
-                rel="noopener noreferrer"
-                className="text-primary underline flex items-center gap-1"
-              >
-                Ver anúncio <ExternalLink className="w-3 h-3" />
-              </a>
-            </div>
-          ),
+      setPublishingProgress({ current: i + 1, total: selectedListingTypes.length });
+      
+      try {
+        const result = await createListing({
+          accountId: selectedAccountId,
+          partId,
+          listingData: {
+            listing_type_id: listingType,
+            price: calculatedPrice,
+          },
         });
-        setOpen(false);
+        
+        if (result.success) {
+          successfulListings.push({ 
+            type: rule?.listing_type_name || listingType, 
+            permalink: result.permalink 
+          });
+        } else {
+          failedListings.push(rule?.listing_type_name || listingType);
+        }
+      } catch (error) {
+        console.error(`Failed to publish ${listingType}:`, error);
+        failedListings.push(rule?.listing_type_name || listingType);
       }
-    } catch (error) {
-      // Error is handled by the mutation's onError
-      console.error('Failed to publish:', error);
+    }
+    
+    setPublishingProgress(null);
+    
+    // Show summary toast
+    if (successfulListings.length > 0) {
+      toast({
+        title: `${successfulListings.length} anúncio(s) criado(s)!`,
+        description: (
+          <div className="flex flex-col gap-2">
+            {successfulListings.map((listing, idx) => (
+              <div key={idx} className="flex items-center gap-2">
+                <CheckCircle2 className="w-3 h-3 text-success" />
+                <span>{listing.type}</span>
+                {listing.permalink && (
+                  <a 
+                    href={listing.permalink} 
+                    target="_blank" 
+                    rel="noopener noreferrer"
+                    className="text-primary underline flex items-center gap-1"
+                  >
+                    <ExternalLink className="w-3 h-3" />
+                  </a>
+                )}
+              </div>
+            ))}
+            {failedListings.length > 0 && (
+              <p className="text-destructive text-xs mt-1">
+                Falhou: {failedListings.join(', ')}
+              </p>
+            )}
+          </div>
+        ),
+      });
+      setOpen(false);
+    } else {
+      toast({
+        title: "Erro ao publicar",
+        description: "Nenhum anúncio foi criado. Tente novamente.",
+        variant: "destructive",
+      });
     }
   };
   
@@ -235,6 +300,27 @@ export function PublishToMLButton({ partId, partName, preco }: PublishToMLButton
               </Select>
             </div>
           )}
+
+          {/* Listing type selection */}
+          {hasPrice && preco && (
+            <ListingTypeSelector
+              basePrice={preco}
+              selectedTypes={selectedListingTypes}
+              onSelectionChange={setSelectedListingTypes}
+            />
+          )}
+          
+          {/* Publishing progress */}
+          {publishingProgress && (
+            <div className="rounded-lg border border-primary/50 bg-primary/10 p-3">
+              <div className="flex items-center gap-2">
+                <Loader2 className="w-4 h-4 animate-spin text-primary" />
+                <span className="text-sm">
+                  Criando anúncio {publishingProgress.current} de {publishingProgress.total}...
+                </span>
+              </div>
+            </div>
+          )}
         </div>
         
         <DialogFooter>
@@ -243,11 +329,16 @@ export function PublishToMLButton({ partId, partName, preco }: PublishToMLButton
           </Button>
           <Button 
             onClick={handlePublish} 
-            disabled={!canPublish || isCreatingListing || !selectedAccountId}
+            disabled={!canPublish || isCreatingListing || !selectedAccountId || publishingProgress !== null}
             className="gap-2 bg-[#FFE600] text-black hover:bg-[#FFE600]/90"
           >
-            {isCreatingListing && <Loader2 className="w-4 h-4 animate-spin" />}
-            {isCreatingListing ? "Publicando..." : "Publicar Anúncio"}
+            {(isCreatingListing || publishingProgress) && <Loader2 className="w-4 h-4 animate-spin" />}
+            {publishingProgress 
+              ? `Publicando ${publishingProgress.current}/${publishingProgress.total}...` 
+              : selectedListingTypes.length > 1 
+                ? `Publicar ${selectedListingTypes.length} Anúncios` 
+                : "Publicar Anúncio"
+            }
           </Button>
         </DialogFooter>
       </DialogContent>

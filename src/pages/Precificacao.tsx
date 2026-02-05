@@ -22,6 +22,7 @@ import {
   BarChart3
 } from "lucide-react";
 import { useState } from "react";
+import { ListingTypeRulesCard } from "@/components/precificacao/ListingTypeRulesCard";
 
 interface PriceAnalysis {
   minPrice: number;
@@ -227,6 +228,11 @@ const Precificacao = () => {
             </>
           )}
         </div>
+      </div>
+
+      {/* Listing Type Rules Section */}
+      <div className="mt-6">
+        <ListingTypeRulesCard />
       </div>
     </AppLayout>
   );
