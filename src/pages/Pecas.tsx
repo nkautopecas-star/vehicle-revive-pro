@@ -64,6 +64,7 @@ const Pecas = () => {
   const [compatibilityFilter, setCompatibilityFilter] = useState<CompatibilityFilter>({ marca: "", modelo: "", ano: null });
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [categoriaFilter, setCategoriaFilter] = useState<string>("all");
+  const [mlFilter, setMlFilter] = useState<string>("all");
   
   const [isFormDialogOpen, setIsFormDialogOpen] = useState(false);
   const [editingPart, setEditingPart] = useState<Part | null>(null);
@@ -140,7 +141,17 @@ const Pecas = () => {
     const matchesStatus = statusFilter === "all" || part.status === statusFilter;
     const matchesCategoria = categoriaFilter === "all" || part.categoria_id === categoriaFilter;
     const matchesCompatibility = compatiblePartIds === null || compatiblePartIds.has(part.id);
-    return matchesSearch && matchesStatus && matchesCategoria && matchesCompatibility;
+    
+    // ML filter
+    const mlStatus = mlStatusMap.get(part.id);
+    const matchesMl = mlFilter === "all" || 
+      (mlFilter === "published" && mlStatus !== undefined) ||
+      (mlFilter === "not_published" && mlStatus === undefined) ||
+      (mlFilter === "active" && mlStatus?.status === "active") ||
+      (mlFilter === "paused" && mlStatus?.status === "paused") ||
+      (mlFilter === "sold" && mlStatus?.status === "sold");
+    
+    return matchesSearch && matchesStatus && matchesCategoria && matchesCompatibility && matchesMl;
   });
 
   const totalEstoque = filteredParts.reduce((acc, p) => acc + p.quantidade, 0);
@@ -333,6 +344,19 @@ const Pecas = () => {
                     {cat.name}
                   </SelectItem>
                 ))}
+              </SelectContent>
+            </Select>
+            <Select value={mlFilter} onValueChange={setMlFilter}>
+              <SelectTrigger className="w-36">
+                <SelectValue placeholder="Mercado Livre" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Todos ML</SelectItem>
+                <SelectItem value="published">Publicados</SelectItem>
+                <SelectItem value="not_published">Não publicados</SelectItem>
+                <SelectItem value="active">ML Ativo</SelectItem>
+                <SelectItem value="paused">ML Pausado</SelectItem>
+                <SelectItem value="sold">ML Vendido</SelectItem>
               </SelectContent>
             </Select>
           </div>
