@@ -30,17 +30,19 @@ import {
 import { Plus, Search, MoreHorizontal, Edit, Trash2, Sparkles, MapPin, Package, Download, FileSpreadsheet, Upload, Car, Eye, Copy, X, ExternalLink } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
- import { useParts, useCategories, useCreatePart, useUpdatePart, useDeletePart, type Part } from "@/hooks/useParts";
- import type { ExtendedPartFormData } from "@/hooks/useParts";
- import { useAllPartCompatibilities, filterPartsByAdvancedCompatibility, type AdvancedCompatibilityFilter, useCreatePartCompatibility } from "@/hooks/usePartsWithCompatibilities";
+import { useParts, useCategories, useCreatePart, useUpdatePart, useDeletePart, type Part } from "@/hooks/useParts";
+import type { ExtendedPartFormData } from "@/hooks/useParts";
+import { useAllPartCompatibilities, filterPartsByAdvancedCompatibility, type AdvancedCompatibilityFilter, useCreatePartCompatibility } from "@/hooks/usePartsWithCompatibilities";
 import { PartFormDialog } from "@/components/parts/PartFormDialog";
-   import { PartFormWizard, type MarketplaceConfig, type NewCompatibility, type MarketplaceAccountSelection } from "@/components/parts/PartFormWizard";
- import { useMercadoLivre } from "@/hooks/useMercadoLivre";
+import { PartFormWizard, type MarketplaceConfig, type NewCompatibility, type MarketplaceAccountSelection } from "@/components/parts/PartFormWizard";
+import { useMercadoLivre } from "@/hooks/useMercadoLivre";
 import { DeletePartDialog } from "@/components/parts/DeletePartDialog";
 import { PartThumbnail } from "@/components/parts/PartThumbnail";
 import { ImportPartsDialog } from "@/components/parts/ImportPartsDialog";
 import { CompatibilityFilterDialog, type CompatibilityFilter } from "@/components/parts/CompatibilityFilterDialog";
 import { exportToCSV, exportToExcel } from "@/utils/exportUtils";
+import { usePartsMLStatus } from "@/hooks/usePartsMLStatus";
+import { MLStatusBadge } from "@/components/parts/MLStatusBadge";
 
 const statusConfig = {
   ativa: { label: "Ativa", className: "bg-success/20 text-success hover:bg-success/30" },
@@ -77,8 +79,12 @@ const Pecas = () => {
   const updateMutation = useUpdatePart();
   const deleteMutation = useDeletePart();
   const createCompatibilityMutation = useCreatePartCompatibility();
-   const { createListing, isCreatingListing, accounts: mlAccounts = [] } = useMercadoLivre();
-   const { toast } = useToast();
+  const { createListing, isCreatingListing, accounts: mlAccounts = [] } = useMercadoLivre();
+  const { toast } = useToast();
+  
+  // Fetch ML status for all parts
+  const partIds = useMemo(() => parts.map(p => p.id), [parts]);
+  const { data: mlStatusMap = new Map() } = usePartsMLStatus(partIds);
 
   // Handle edit/duplicate from URL params
   useEffect(() => {
@@ -486,7 +492,12 @@ const Pecas = () => {
                         <Link to={`/pecas/${part.id}`} className="flex items-center gap-3 hover:opacity-80 transition-opacity">
                           <PartThumbnail partId={part.id} partName={part.nome} />
                           <div>
-                            <p className="font-medium hover:text-primary transition-colors">{part.nome}</p>
+                            <div className="flex items-center gap-2">
+                              <p className="font-medium hover:text-primary transition-colors">{part.nome}</p>
+                              {mlStatusMap.get(part.id) && (
+                                <MLStatusBadge status={mlStatusMap.get(part.id)!} />
+                              )}
+                            </div>
                             <p className="text-xs text-muted-foreground">{part.categoria_nome || "Sem categoria"}</p>
                           </div>
                         </Link>
