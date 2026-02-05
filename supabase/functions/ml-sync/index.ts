@@ -492,23 +492,25 @@ serve(async (req) => {
           // Fetch ALL items from ML using scroll_id for pagination beyond 1000 offset limit
           const limit = 50;
           let allItems: any[] = [];
-          const statuses = ['active', 'paused'];
+          // Include 'sold' status to get complete catalog
+          const statuses = ['active', 'paused', 'closed'];
           
           for (const status of statuses) {
             let offset = 0;
             let scrollId: string | null = null;
             let hasMore = true;
+            let processedIds = new Set<string>(); // Track processed IDs to avoid duplicates
             
             console.log(`Starting to fetch all ${status} items...`);
             
             while (hasMore) {
               let endpoint: string;
               
-              // Use scroll_id if available (for pagination beyond 1000)
+              // Use search_type=scan for more reliable pagination
               if (scrollId) {
                 endpoint = `/users/${mlUserId}/items/search?status=${status}&scroll_id=${scrollId}`;
               } else {
-                endpoint = `/users/${mlUserId}/items/search?status=${status}&offset=${offset}&limit=${limit}`;
+                endpoint = `/users/${mlUserId}/items/search?status=${status}&offset=${offset}&limit=${limit}&search_type=scan`;
               }
               
               let searchResult;
@@ -520,9 +522,15 @@ serve(async (req) => {
               }
               
               const results = searchResult.results || [];
-              console.log(`Fetched ${results.length} ${status} item IDs (offset: ${offset})`);
               
-              if (results.length === 0) {
+              // Filter out already processed IDs (can happen with scroll_id)
+              const newIds = results.filter((id: string) => !processedIds.has(id));
+              newIds.forEach((id: string) => processedIds.add(id));
+              
+              console.log(`Fetched ${results.length} ${status} item IDs (${newIds.length} new, offset: ${offset})`);
+              
+              if (newIds.length === 0) {
+                // No new items, stop
                 hasMore = false;
                 break;
               }
@@ -533,38 +541,49 @@ serve(async (req) => {
               }
               
               // Get full item details in batches of 20
-              for (let i = 0; i < results.length; i += 20) {
-                const batch = results.slice(i, i + 20);
-                const itemsResponse = await mlApiCall(
-                  `/items?ids=${batch.join(',')}`,
-                  accessToken,
-                  {},
-                  retryContext
-                );
-                
-                for (const itemData of itemsResponse) {
-                  if (itemData.code === 200 && itemData.body) {
-                    allItems.push(itemData.body);
+              for (let i = 0; i < newIds.length; i += 20) {
+                const batch = newIds.slice(i, i + 20);
+                try {
+                  const itemsResponse = await mlApiCall(
+                    `/items?ids=${batch.join(',')}`,
+                    accessToken,
+                    {},
+                    retryContext
+                  );
+                  
+                  for (const itemData of itemsResponse) {
+                    if (itemData.code === 200 && itemData.body) {
+                      allItems.push(itemData.body);
+                    }
                   }
+                } catch (error) {
+                  console.error(`Error fetching item details batch:`, error);
                 }
+                
+                // Small delay to avoid rate limiting
+                await new Promise(resolve => setTimeout(resolve, 100));
               }
               
               // Update job with total items found so far
               await updateJobProgress({ total_items: allItems.length });
               
               // Check if we should continue
-              if (results.length < limit) {
+              const total = searchResult.paging?.total || 0;
+              const fetched = processedIds.size;
+              
+              if (results.length < limit || fetched >= total) {
                 hasMore = false;
               } else {
                 offset += limit;
-                // If we're past 1000 offset and don't have scroll_id, we've hit the limit
+                // If we have scroll_id, we can go beyond 1000
+                // Otherwise, stop at 1000
                 if (offset >= 1000 && !scrollId) {
-                  console.log(`Reached offset limit of 1000 for ${status}, stopping.`);
+                  console.log(`Reached offset limit of 1000 for ${status} without scroll_id. Total from API: ${total}`);
                   hasMore = false;
                 }
               }
               
-              console.log(`Progress: ${allItems.length} total items fetched so far...`);
+              console.log(`Progress: ${allItems.length} total items fetched (${fetched}/${total} for ${status})...`);
             }
             
             console.log(`Completed ${status}: fetched items, total now: ${allItems.length}`);
@@ -601,12 +620,20 @@ serve(async (req) => {
               // Get the first image URL from ML item pictures
               const imageUrl = item.pictures?.[0]?.url || item.pictures?.[0]?.secure_url || item.thumbnail || null;
               
+              // Map ML status to our status: active, paused, closed->sold
+              let mappedStatus: 'active' | 'paused' | 'sold' = 'paused';
+              if (item.status === 'active') {
+                mappedStatus = 'active';
+              } else if (item.status === 'closed') {
+                mappedStatus = 'sold';
+              }
+              
               return {
                 marketplace_account_id: account_id,
                 external_id: item.id,
                 titulo: item.title?.substring(0, 255) || 'Sem título',
                 preco: item.price || 0,
-                status: item.status === 'active' ? 'active' : 'paused',
+                status: mappedStatus,
                 part_id: null,
                 last_sync: new Date().toISOString(),
                 image_url: imageUrl,
@@ -642,12 +669,20 @@ serve(async (req) => {
                 // Get the first image URL from ML item pictures
                 const imageUrl = item.pictures?.[0]?.url || item.pictures?.[0]?.secure_url || item.thumbnail || null;
                 
+                // Map ML status to our status: active, paused, closed->sold
+                let mappedStatus: 'active' | 'paused' | 'sold' = 'paused';
+                if (item.status === 'active') {
+                  mappedStatus = 'active';
+                } else if (item.status === 'closed') {
+                  mappedStatus = 'sold';
+                }
+                
                 await supabase
                   .from('marketplace_listings')
                   .update({
                     titulo: item.title?.substring(0, 255) || 'Sem título',
                     preco: item.price || 0,
-                    status: item.status === 'active' ? 'active' : 'paused',
+                    status: mappedStatus,
                     last_sync: new Date().toISOString(),
                     image_url: imageUrl,
                   })
