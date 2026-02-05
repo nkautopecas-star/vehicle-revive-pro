@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useRef } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 
@@ -12,6 +12,9 @@ export interface PartSuggestion {
   descricao?: string;
 }
 
+// Cache global para sugestões de OEM
+const suggestionCache = new Map<string, PartSuggestion>();
+
 export function useSuggestPartInfo() {
   const [isLoading, setIsLoading] = useState(false);
   const [suggestion, setSuggestion] = useState<PartSuggestion | null>(null);
@@ -24,6 +27,16 @@ export function useSuggestPartInfo() {
   ): Promise<PartSuggestion | null> => {
     if (!codigoOEM || codigoOEM.trim().length < 3) {
       return null;
+    }
+
+    const cacheKey = `${codigoOEM.trim().toUpperCase()}|${vehicleInfo || ""}|${categoryName || ""}`;
+    
+    // Verificar cache
+    const cached = suggestionCache.get(cacheKey);
+    if (cached) {
+      console.log("Using cached suggestion for OEM:", codigoOEM);
+      setSuggestion(cached);
+      return cached;
     }
 
     setIsLoading(true);
@@ -51,6 +64,10 @@ export function useSuggestPartInfo() {
         return null;
       }
 
+      // Salvar no cache
+      suggestionCache.set(cacheKey, data);
+      console.log("Cached suggestion for OEM:", codigoOEM);
+      
       setSuggestion(data);
       return data;
     } catch (err) {
