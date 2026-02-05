@@ -35,6 +35,7 @@ import { usePartCompatibilities } from "@/hooks/usePartCompatibilities";
 import { usePartStockMovements } from "@/hooks/useStockMovements";
 import { PartImageGallery } from "@/components/parts/PartImageGallery";
 import { StockMovementDialog } from "@/components/parts/StockMovementDialog";
+import { PublishToMLButton } from "@/components/parts/PublishToMLButton";
 
 const statusConfig = {
   ativa: { label: "Ativa", className: "bg-success/20 text-success" },
@@ -125,6 +126,11 @@ const PecaDetalhes = () => {
             </Link>
           </Button>
           <div className="flex gap-2">
+            <PublishToMLButton 
+              partId={part.id} 
+              partName={part.nome} 
+              preco={part.preco_venda} 
+            />
             <Button variant="outline" asChild>
               <Link to={`/pecas?duplicate=${part.id}`}>
                 <Copy className="w-4 h-4 mr-2" />
