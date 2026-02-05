@@ -10,9 +10,69 @@ const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 
 const ML_API_URL = 'https://api.mercadolibre.com';
+const ML_TOKEN_URL = 'https://api.mercadolibre.com/oauth/token';
+const ML_APP_ID = Deno.env.get('ML_APP_ID')!;
+const ML_CLIENT_SECRET = Deno.env.get('ML_CLIENT_SECRET')!;
 
-// Helper to make authenticated ML API calls
-async function mlApiCall(endpoint: string, accessToken: string, options: RequestInit = {}): Promise<any> {
+// Type for retry context
+interface RetryContext {
+  supabase: any;
+  accountId: string;
+  refreshToken: string;
+}
+
+// Helper to refresh access token
+async function refreshAccessToken(supabase: any, accountId: string, refreshToken: string): Promise<string | null> {
+  console.log('Refreshing access token for account:', accountId);
+  
+  try {
+    const tokenResponse = await fetch(ML_TOKEN_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({
+        grant_type: 'refresh_token',
+        client_id: ML_APP_ID,
+        client_secret: ML_CLIENT_SECRET,
+        refresh_token: refreshToken,
+      }),
+    });
+
+    if (!tokenResponse.ok) {
+      console.error('Token refresh failed:', await tokenResponse.text());
+      await supabase
+        .from('marketplace_accounts')
+        .update({ status: 'error' })
+        .eq('id', accountId);
+      return null;
+    }
+
+    const tokenData = await tokenResponse.json();
+    
+    await supabase
+      .from('marketplace_accounts')
+      .update({
+        access_token: tokenData.access_token,
+        refresh_token: tokenData.refresh_token,
+        status: 'active',
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', accountId);
+
+    console.log('Token refreshed successfully');
+    return tokenData.access_token;
+  } catch (error) {
+    console.error('Error refreshing token:', error);
+    return null;
+  }
+}
+
+// Helper to make authenticated ML API calls with auto-refresh
+async function mlApiCall(
+  endpoint: string, 
+  accessToken: string, 
+  options: RequestInit = {},
+  retryContext?: RetryContext
+): Promise<any> {
   const response = await fetch(`${ML_API_URL}${endpoint}`, {
     ...options,
     headers: {
@@ -24,6 +84,24 @@ async function mlApiCall(endpoint: string, accessToken: string, options: Request
   
   if (!response.ok) {
     const error = await response.text();
+    
+    // Check for 401 unauthorized - try to refresh token
+    if (response.status === 401 && retryContext) {
+      console.log('Got 401, attempting to refresh token...');
+      const newToken = await refreshAccessToken(
+        retryContext.supabase, 
+        retryContext.accountId, 
+        retryContext.refreshToken
+      );
+      
+      if (newToken) {
+        console.log('Retrying request with new token...');
+        return mlApiCall(endpoint, newToken, options); // No retry context to prevent infinite loop
+      } else {
+        throw new Error('TOKEN_EXPIRED: Não foi possível renovar o token do Mercado Livre. Por favor, reconecte sua conta na página de Integrações.');
+      }
+    }
+    
     // Parse error to provide better messages
     let parsedError;
     try {
@@ -107,6 +185,14 @@ serve(async (req) => {
     }
 
     const accessToken = account.access_token;
+    const refreshToken = account.refresh_token;
+    
+    // Create retry context for auto-refresh
+    const retryContext: RetryContext = {
+      supabase,
+      accountId: account_id,
+      refreshToken: refreshToken || '',
+    };
 
     // Create listing from part
     if (action === 'create_listing') {
@@ -169,7 +255,7 @@ serve(async (req) => {
       }
 
       // Get user site_id for category
-      const mlUser = await mlApiCall('/users/me', accessToken);
+      const mlUser = await mlApiCall('/users/me', accessToken, {}, retryContext);
       const siteId = mlUser.site_id || 'MLB'; // Default to Brazil
 
       // Build attributes - required by ML API
@@ -275,7 +361,7 @@ serve(async (req) => {
       const mlResponse = await mlApiCall('/items', accessToken, {
         method: 'POST',
         body: JSON.stringify(mlListing),
-      });
+      }, retryContext);
 
       console.log('ML listing created:', mlResponse.id);
 
@@ -338,7 +424,7 @@ serve(async (req) => {
       await mlApiCall(`/items/${listing.external_id}`, accessToken, {
         method: 'PUT',
         body: JSON.stringify(updateData),
-      });
+      }, retryContext);
 
       // Update local listing
       await supabase
@@ -399,7 +485,7 @@ serve(async (req) => {
           await updateJobProgress({ status: 'running' });
 
           // First, get ML user ID
-          const mlUser = await mlApiCall('/users/me', accessToken);
+          const mlUser = await mlApiCall('/users/me', accessToken, {}, retryContext);
           const mlUserId = mlUser.id;
           console.log('ML User ID:', mlUserId);
 
@@ -427,7 +513,7 @@ serve(async (req) => {
               
               let searchResult;
               try {
-                searchResult = await mlApiCall(endpoint, accessToken);
+                searchResult = await mlApiCall(endpoint, accessToken, {}, retryContext);
               } catch (error) {
                 console.log(`Error fetching ${status} items at offset ${offset}:`, error);
                 break;
@@ -451,7 +537,9 @@ serve(async (req) => {
                 const batch = results.slice(i, i + 20);
                 const itemsResponse = await mlApiCall(
                   `/items?ids=${batch.join(',')}`,
-                  accessToken
+                  accessToken,
+                  {},
+                  retryContext
                 );
                 
                 for (const itemData of itemsResponse) {
