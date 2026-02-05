@@ -89,33 +89,43 @@ const Integracoes = () => {
     exchangeCode: exchangeOLXCode,
   } = useOLX();
 
-  // Handle OAuth callback
+  // Handle OAuth callback - only process each code once
   useEffect(() => {
     const code = searchParams.get('code');
     const state = searchParams.get('state');
     
-    if (code && !processingCode) {
-      setProcessingCode(true);
-      
-      // Determine which marketplace based on state or URL params
-      // OLX might add a specific state or we can check for OLX-specific params
-      const isOLX = state?.includes('olx') || searchParams.get('source') === 'olx';
-      
-      const exchangePromise = isOLX 
-        ? exchangeOLXCode(code) 
-        : exchangeMLCode(code);
-      
-      exchangePromise
-        .then(() => {
-          setSearchParams({});
-        })
-        .catch(() => {
-          setSearchParams({});
-        })
-        .finally(() => {
-          setProcessingCode(false);
-        });
+    if (!code || processingCode) return;
+    
+    // Check if this code was already processed to avoid duplicate attempts
+    const processedCodeKey = `oauth_processed_${code.substring(0, 20)}`;
+    if (sessionStorage.getItem(processedCodeKey)) {
+      // Code already processed, just clear the URL params
+      setSearchParams({});
+      return;
     }
+    
+    // Mark code as being processed
+    sessionStorage.setItem(processedCodeKey, 'true');
+    setProcessingCode(true);
+    
+    // Determine which marketplace based on state or URL params
+    // OLX might add a specific state or we can check for OLX-specific params
+    const isOLX = state?.includes('olx') || searchParams.get('source') === 'olx';
+    
+    const exchangePromise = isOLX 
+      ? exchangeOLXCode(code) 
+      : exchangeMLCode(code);
+    
+    exchangePromise
+      .then(() => {
+        setSearchParams({});
+      })
+      .catch(() => {
+        setSearchParams({});
+      })
+      .finally(() => {
+        setProcessingCode(false);
+      });
   }, [searchParams, exchangeMLCode, exchangeOLXCode, setSearchParams, processingCode]);
 
   const categorizedIntegrations = Object.entries(categories).map(([key, value]) => ({
