@@ -132,10 +132,10 @@ export function useCreatePart() {
   const { user } = useAuth();
 
   return useMutation({
-     mutationFn: async (data: ExtendedPartFormData) => {
+      mutationFn: async (data: ExtendedPartFormData): Promise<string> => {
       if (!user) throw new Error('Usuário não autenticado');
 
-      const { error } = await supabase
+       const { data: insertedPart, error } = await supabase
         .from('parts')
         .insert({
           nome: data.nome,
@@ -156,11 +156,15 @@ export function useCreatePart() {
            comprimento_cm: data.comprimento_cm || null,
            largura_cm: data.largura_cm || null,
            altura_cm: data.altura_cm || null,
-        });
+          })
+          .select('id')
+          .single();
 
       if (error) {
         throw error;
       }
+       
+       return insertedPart.id;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['parts'] });

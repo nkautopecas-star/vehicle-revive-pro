@@ -6,9 +6,8 @@
  import { useCategories, useVehiclesForSelect, type Part, type PartFormData } from "@/hooks/useParts";
  import { PartBasicInfoStep } from "./wizard/PartBasicInfoStep";
  import { PartMarketplaceStep } from "./wizard/PartMarketplaceStep";
- import { PartImageUpload } from "./PartImageUpload";
- import { PartCompatibilities } from "./PartCompatibilities";
  import { Progress } from "@/components/ui/progress";
+ import type { CompatibilityEntry } from "./wizard/CompatibilityInlineForm";
  
  export interface MarketplaceConfig {
    mercadolivre: boolean;
@@ -30,11 +29,18 @@
    altura_cm?: number;
  }
  
+ export interface NewCompatibility {
+   marca: string;
+   modelo: string;
+   ano_inicio: number | null;
+   ano_fim: number | null;
+ }
+ 
  interface PartFormWizardProps {
    open: boolean;
    onOpenChange: (open: boolean) => void;
    part?: Part | null;
-   onSubmit: (data: ExtendedPartFormData, marketplaces: MarketplaceConfig) => void;
+   onSubmit: (data: ExtendedPartFormData, marketplaces: MarketplaceConfig, newCompatibilities: NewCompatibility[]) => void;
    isLoading?: boolean;
    isDuplicating?: boolean;
  }
@@ -78,6 +84,8 @@
      olx: false,
      shopee: false,
    });
+ 
+   const [newCompatibilities, setNewCompatibilities] = useState<CompatibilityEntry[]>([]);
  
    const isEditing = part && !isDuplicating;
  
@@ -124,6 +132,7 @@
        });
      }
      setMarketplaces({ mercadolivre: false, olx: false, shopee: false });
+     setNewCompatibilities([]);
      setStep("basic");
    }, [part, open]);
  
@@ -140,7 +149,8 @@
    };
  
    const handleFinalSubmit = () => {
-     onSubmit(formData, marketplaces);
+     const compatibilitiesToSave = newCompatibilities.map(({ id, ...rest }) => rest);
+     onSubmit(formData, marketplaces, compatibilitiesToSave);
    };
  
    const getProgress = () => {
@@ -206,6 +216,8 @@
                isDuplicating={isDuplicating}
                part={part}
                partId={part?.id}
+             newCompatibilities={newCompatibilities}
+             setNewCompatibilities={setNewCompatibilities}
              />
            )}
          </div>

@@ -29,11 +29,11 @@ import {
 } from "@/components/ui/select";
 import { Plus, Search, MoreHorizontal, Edit, Trash2, Sparkles, MapPin, Package, Download, FileSpreadsheet, Upload, Car, Eye, Copy, X } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { useParts, useCategories, useCreatePart, useUpdatePart, useDeletePart, type Part, type PartFormData } from "@/hooks/useParts";
+ import { useParts, useCategories, useCreatePart, useUpdatePart, useDeletePart, type Part } from "@/hooks/useParts";
  import type { ExtendedPartFormData } from "@/hooks/useParts";
-import { useAllPartCompatibilities, filterPartsByAdvancedCompatibility, type AdvancedCompatibilityFilter } from "@/hooks/usePartsWithCompatibilities";
+ import { useAllPartCompatibilities, filterPartsByAdvancedCompatibility, type AdvancedCompatibilityFilter, useCreatePartCompatibility } from "@/hooks/usePartsWithCompatibilities";
 import { PartFormDialog } from "@/components/parts/PartFormDialog";
- import { PartFormWizard, type MarketplaceConfig } from "@/components/parts/PartFormWizard";
+  import { PartFormWizard, type MarketplaceConfig, type NewCompatibility } from "@/components/parts/PartFormWizard";
  import { useMercadoLivre } from "@/hooks/useMercadoLivre";
 import { DeletePartDialog } from "@/components/parts/DeletePartDialog";
 import { PartThumbnail } from "@/components/parts/PartThumbnail";
@@ -75,6 +75,7 @@ const Pecas = () => {
   const createMutation = useCreatePart();
   const updateMutation = useUpdatePart();
   const deleteMutation = useDeletePart();
+  const createCompatibilityMutation = useCreatePartCompatibility();
    const { createListing, accounts: mlAccounts = [] } = useMercadoLivre();
 
   // Handle edit/duplicate from URL params
@@ -138,12 +139,23 @@ const Pecas = () => {
   const valorEstoque = filteredParts.reduce((acc, p) => acc + (p.preco_venda || 0) * p.quantidade, 0);
   const uniqueCategories = [...new Set(parts.map((p) => p.categoria_nome).filter(Boolean))];
 
-   const handleCreatePart = (data: ExtendedPartFormData, marketplaces: MarketplaceConfig) => {
-     createMutation.mutate(data, {
-       onSuccess: (_, variables) => {
+    const handleCreatePart = async (data: ExtendedPartFormData, marketplaces: MarketplaceConfig, newCompatibilities: NewCompatibility[]) => {
+      createMutation.mutate(data, {
+        onSuccess: async (partId) => {
         setIsFormDialogOpen(false);
-         // If marketplaces selected, create listings
-         // Note: We'd need the created part ID here for full implementation
+          // Save compatibilities if any
+          if (newCompatibilities.length > 0 && partId) {
+            for (const compat of newCompatibilities) {
+              await createCompatibilityMutation.mutateAsync({
+                part_id: partId,
+                marca: compat.marca,
+                modelo: compat.modelo,
+                ano_inicio: compat.ano_inicio,
+                ano_fim: compat.ano_fim,
+              });
+            }
+          }
+          // TODO: If marketplaces selected, create listings
       },
     });
   };
@@ -167,12 +179,24 @@ const Pecas = () => {
     setIsFormDialogOpen(true);
   };
 
-   const handleUpdatePart = (data: ExtendedPartFormData, marketplaces: MarketplaceConfig) => {
+    const handleUpdatePart = async (data: ExtendedPartFormData, marketplaces: MarketplaceConfig, newCompatibilities: NewCompatibility[]) => {
     if (!editingPart) return;
     updateMutation.mutate({ id: editingPart.id, data }, {
-      onSuccess: () => {
+       onSuccess: async () => {
         setIsFormDialogOpen(false);
         setEditingPart(null);
+         // Save new compatibilities if any
+         if (newCompatibilities.length > 0) {
+           for (const compat of newCompatibilities) {
+             await createCompatibilityMutation.mutateAsync({
+               part_id: editingPart.id,
+               marca: compat.marca,
+               modelo: compat.modelo,
+               ano_inicio: compat.ano_inicio,
+               ano_fim: compat.ano_fim,
+             });
+           }
+         }
       },
     });
   };

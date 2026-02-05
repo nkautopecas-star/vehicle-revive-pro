@@ -17,13 +17,14 @@
  } from "@/components/ui/select";
  import { ChevronLeft, Loader2, Package, Scale, Ruler, Info } from "lucide-react";
  import { Car, Calendar, AlertCircle } from "lucide-react";
- import type { ExtendedPartFormData, MarketplaceConfig } from "../PartFormWizard";
+ import type { ExtendedPartFormData, MarketplaceConfig, NewCompatibility } from "../PartFormWizard";
  import type { Part } from "@/hooks/useParts";
  import { useMercadoLivre } from "@/hooks/useMercadoLivre";
  import { Badge } from "@/components/ui/badge";
  import { Separator } from "@/components/ui/separator";
  import { usePartCompatibilities } from "@/hooks/usePartCompatibilities";
  import { Alert, AlertDescription } from "@/components/ui/alert";
+ import { CompatibilityInlineForm, type CompatibilityEntry } from "./CompatibilityInlineForm";
  
  interface Category {
    id: string;
@@ -43,6 +44,8 @@
    isDuplicating: boolean;
    part?: Part | null;
    partId?: string;
+   newCompatibilities: CompatibilityEntry[];
+   setNewCompatibilities: (compatibilities: CompatibilityEntry[]) => void;
  }
  
  // ML Category mapping based on internal categories
@@ -70,12 +73,42 @@
    isDuplicating,
    part,
    partId,
+   newCompatibilities,
+   setNewCompatibilities,
  }: PartMarketplaceStepProps) {
    const { accounts: mlAccounts = [] } = useMercadoLivre();
    const activeMLAccount = mlAccounts?.find(acc => acc.status === 'active');
  
    // Fetch existing compatibilities for the part
    const { data: compatibilities = [] } = usePartCompatibilities(part?.id || partId);
+ 
+   // Combine existing and new compatibilities for display
+   const allCompatibilities = [
+     ...compatibilities.map(c => ({
+       id: c.id,
+       marca: c.marca,
+       modelo: c.modelo,
+       ano_inicio: c.ano_inicio,
+       ano_fim: c.ano_fim,
+       isExisting: true,
+     })),
+     ...newCompatibilities.map(c => ({
+       ...c,
+       isExisting: false,
+     })),
+   ];
+ 
+   const handleAddCompatibility = (compat: Omit<CompatibilityEntry, "id">) => {
+     const newEntry: CompatibilityEntry = {
+       ...compat,
+       id: `new-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+     };
+     setNewCompatibilities([...newCompatibilities, newEntry]);
+   };
+ 
+   const handleRemoveCompatibility = (id: string) => {
+     setNewCompatibilities(newCompatibilities.filter(c => c.id !== id));
+   };
  
    // Get category name for ML suggestion
    const categoryName = categories.find(c => c.id === formData.categoria_id)?.name || "";
@@ -90,7 +123,7 @@
      return null;
    };
  
-   const hasCompatibilities = compatibilities.length > 0;
+   const hasCompatibilities = allCompatibilities.length > 0;
  
    return (
      <>
@@ -262,6 +295,13 @@
                </CardContent>
              </Card>
  
+         {/* Compatibility Form */}
+         <CompatibilityInlineForm
+           compatibilities={newCompatibilities}
+           onAdd={handleAddCompatibility}
+           onRemove={handleRemoveCompatibility}
+         />
+ 
              {/* ML-specific info preview */}
              <Card className="bg-muted/30">
                <CardHeader className="pb-3">
@@ -305,12 +345,16 @@
                  <div className="space-y-2">
                    <div className="flex items-center gap-2 text-sm">
                      <Car className="w-4 h-4 text-muted-foreground" />
-                     <span className="text-muted-foreground">Compatibilidades ({compatibilities.length}):</span>
+                 <span className="text-muted-foreground">Compatibilidades ({allCompatibilities.length}):</span>
                    </div>
                    {hasCompatibilities ? (
                      <div className="flex flex-wrap gap-2">
-                       {compatibilities.slice(0, 6).map((compat) => (
-                         <Badge key={compat.id} variant="secondary" className="text-xs">
+                   {allCompatibilities.slice(0, 6).map((compat) => (
+                     <Badge 
+                       key={compat.id} 
+                       variant={compat.isExisting ? "secondary" : "default"}
+                       className="text-xs"
+                     >
                            {compat.marca} {compat.modelo}
                            {formatYearRange(compat.ano_inicio, compat.ano_fim) && (
                              <span className="ml-1 opacity-70">
@@ -319,9 +363,9 @@
                            )}
                          </Badge>
                        ))}
-                       {compatibilities.length > 6 && (
+                   {allCompatibilities.length > 6 && (
                          <Badge variant="outline" className="text-xs">
-                           +{compatibilities.length - 6} mais
+                       +{allCompatibilities.length - 6} mais
                          </Badge>
                        )}
                      </div>
