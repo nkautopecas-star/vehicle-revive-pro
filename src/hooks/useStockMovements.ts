@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import type { Database } from "@/integrations/supabase/types";
+import { useReactivateListings } from "./useReactivateListings";
 
 type MovementType = Database["public"]["Enums"]["movement_type"];
 
@@ -42,11 +43,23 @@ export function usePartStockMovements(partId: string | undefined) {
 
 export function useCreateStockMovement() {
   const queryClient = useQueryClient();
+  const reactivateListings = useReactivateListings();
 
   return useMutation({
     mutationFn: async (input: CreateStockMovementInput) => {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error("Usuário não autenticado");
+
+      // Get current quantity before update
+      const { data: part, error: partError } = await supabase
+        .from('parts')
+        .select('quantidade')
+        .eq('id', input.part_id)
+        .single();
+
+      if (partError) throw partError;
+
+      const previousQuantity = part.quantidade;
 
       // Insert movement
       const { error: movementError } = await supabase
@@ -61,15 +74,7 @@ export function useCreateStockMovement() {
 
       if (movementError) throw movementError;
 
-      // Update part quantity
-      const { data: part, error: partError } = await supabase
-        .from('parts')
-        .select('quantidade')
-        .eq('id', input.part_id)
-        .single();
-
-      if (partError) throw partError;
-
+      // Calculate new quantity
       let newQuantity = part.quantidade;
       if (input.tipo === 'entrada') {
         newQuantity += input.quantidade;
@@ -79,15 +84,30 @@ export function useCreateStockMovement() {
         newQuantity = input.quantidade; // ajuste
       }
 
+      newQuantity = Math.max(0, newQuantity);
+
       const { error: updateError } = await supabase
         .from('parts')
-        .update({ quantidade: Math.max(0, newQuantity) })
+        .update({ quantidade: newQuantity })
         .eq('id', input.part_id);
 
       if (updateError) throw updateError;
+
+      return {
+        previousQuantity,
+        newQuantity,
+        partId: input.part_id,
+      };
     },
-    onSuccess: () => {
+    onSuccess: async (result) => {
       queryClient.invalidateQueries({ queryKey: ['parts'] });
+      queryClient.invalidateQueries({ queryKey: ['stock-movements', result.partId] });
+
+      // If stock was zero and now has items, reactivate listings
+      if (result.previousQuantity === 0 && result.newQuantity > 0) {
+        console.log("Stock restored from zero, attempting to reactivate listings...");
+        reactivateListings.mutate({ partId: result.partId });
+      }
     },
   });
 }

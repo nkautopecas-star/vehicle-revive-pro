@@ -58,6 +58,8 @@ export default function Anuncios() {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [accountFilter, setAccountFilter] = useState("all");
+  const [sortBy, setSortBy] = useState<'created_at' | 'updated_at' | 'preco' | 'titulo'>('created_at');
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
   const [linkDialogOpen, setLinkDialogOpen] = useState(false);
   const [selectedListing, setSelectedListing] = useState<MarketplaceListing | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
@@ -70,6 +72,8 @@ export default function Anuncios() {
     search: search.length >= 2 ? search : undefined,
     page: currentPage,
     pageSize,
+    sortBy,
+    sortOrder,
   });
   const { data: stats } = useMarketplaceListingStats(
     accountFilter !== "all" ? accountFilter : undefined
@@ -238,6 +242,26 @@ export default function Anuncios() {
                       {account.nome_conta}
                     </SelectItem>
                   ))}
+                </SelectContent>
+              </Select>
+              <Select 
+                value={`${sortBy}-${sortOrder}`} 
+                onValueChange={(value) => {
+                  const [newSortBy, newSortOrder] = value.split('-') as ['created_at' | 'updated_at' | 'preco' | 'titulo', 'asc' | 'desc'];
+                  setSortBy(newSortBy);
+                  setSortOrder(newSortOrder);
+                }}
+              >
+                <SelectTrigger className="w-full md:w-[200px]">
+                  <SelectValue placeholder="Ordenar por" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="created_at-desc">Mais recentes</SelectItem>
+                  <SelectItem value="created_at-asc">Mais antigos</SelectItem>
+                  <SelectItem value="preco-desc">Maior preço</SelectItem>
+                  <SelectItem value="preco-asc">Menor preço</SelectItem>
+                  <SelectItem value="titulo-asc">Título A-Z</SelectItem>
+                  <SelectItem value="titulo-desc">Título Z-A</SelectItem>
                 </SelectContent>
               </Select>
             </div>
