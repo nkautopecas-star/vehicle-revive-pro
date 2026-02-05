@@ -152,7 +152,7 @@ export function useMercadoLivre() {
       accountId: string; 
       partId: string; 
       listingData?: Record<string, unknown>;
-    }) => {
+    }): Promise<{ success: boolean; listing_id?: string; ml_id?: string; permalink?: string }> => {
       const { data, error } = await supabase.functions.invoke('ml-sync', {
         body: {
           action: 'create_listing',
@@ -165,11 +165,8 @@ export function useMercadoLivre() {
       if (error) throw error;
       return data;
     },
-    onSuccess: (data) => {
-      toast({
-        title: "Anúncio criado!",
-        description: "O anúncio foi publicado no Mercado Livre",
-      });
+    onSuccess: () => {
+      // Toast is handled by the caller to show the permalink
       queryClient.invalidateQueries({ queryKey: ['marketplace-listings'] });
     },
     onError: (error) => {
@@ -248,7 +245,7 @@ export function useMercadoLivre() {
     exchangeCode,
     syncAll: syncMutation.mutate,
     isSyncing: syncMutation.isPending,
-    createListing: createListingMutation.mutate,
+    createListing: createListingMutation.mutateAsync,
     isCreatingListing: createListingMutation.isPending,
     fetchQuestions: fetchQuestionsMutation.mutate,
     isFetchingQuestions: fetchQuestionsMutation.isPending,
