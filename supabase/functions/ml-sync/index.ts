@@ -25,6 +25,7 @@ interface SyncCursor {
   statusIndex: number;
   offset: number;
   dateEnd: string | null;
+  scrollId: string | null;
   mlUserId?: number;
   totalFetched: number;
   emptyPagesInARow: number;
@@ -433,6 +434,7 @@ serve(async (req) => {
           statusIndex: 0,
           offset: 0,
           dateEnd: null,
+          scrollId: null,
           totalFetched: 0,
           emptyPagesInARow: 0,
         };
@@ -474,6 +476,7 @@ serve(async (req) => {
         statusIndex: 0,
         offset: 0,
         dateEnd: null,
+        scrollId: null,
         totalFetched: 0,
         emptyPagesInARow: 0,
       };
@@ -517,13 +520,22 @@ serve(async (req) => {
 
         const currentStatus = cursor.statuses[cursor.statusIndex];
 
-        // Build endpoint
-        let endpoint = `/users/${mlUserId}/items/search?status=${currentStatus}&offset=${cursor.offset}&limit=${LIMIT}&sort=date_created_desc`;
+        // Build endpoint - use scroll_id if available for more reliable pagination
+        let endpoint = `/users/${mlUserId}/items/search?status=${currentStatus}&limit=${LIMIT}&sort=date_created_desc`;
+        
+        // Add scroll_id for continuation (more reliable than offset for large datasets)
+        if (cursor.scrollId) {
+          endpoint += `&scroll_id=${encodeURIComponent(cursor.scrollId)}`;
+        } else {
+          // Only use offset on first page of a date window
+          endpoint += `&offset=${cursor.offset}`;
+        }
+        
         if (cursor.dateEnd) {
           endpoint += `&date_created_to=${encodeURIComponent(cursor.dateEnd)}`;
         }
 
-        console.log(`Fetching: ${currentStatus} offset=${cursor.offset} dateEnd=${cursor.dateEnd || 'none'}`);
+        console.log(`Fetching: ${currentStatus} offset=${cursor.offset} scrollId=${cursor.scrollId || 'none'} dateEnd=${cursor.dateEnd || 'none'}`);
 
         let searchResult;
         try {
@@ -539,7 +551,8 @@ serve(async (req) => {
 
         const ids: string[] = searchResult.results || [];
         const paging = searchResult.paging || {};
-        console.log(`Got ${ids.length} items (total in status: ${paging.total || 0})`);
+        const scrollId = searchResult.scroll_id || null;
+        console.log(`Got ${ids.length} items (total in status: ${paging.total || 0}) scrollId=${scrollId ? 'present' : 'none'}`);
 
         // Fetch item details
         const items: any[] = [];
@@ -609,36 +622,62 @@ serve(async (req) => {
           cursor,
         });
 
-        // Decide next page
-        if (ids.length < LIMIT) {
-          // No more items in current date range
+        // Decide next page - prioritize scroll_id for reliable pagination
+        if (ids.length === 0) {
+          // No more items in this status
+          cursor.statusIndex++;
+          cursor.offset = 0;
+          cursor.dateEnd = null;
+          cursor.scrollId = null;
+          cursor.emptyPagesInARow = 0;
+          console.log(`No items returned, moving to next status index: ${cursor.statusIndex}`);
+        } else if (scrollId && ids.length === LIMIT) {
+          // Use scroll_id for next page (most reliable method)
+          cursor.scrollId = scrollId;
+          cursor.offset += LIMIT;
+          console.log(`Using scroll_id for next page, offset: ${cursor.offset}`);
+        } else if (ids.length < LIMIT) {
+          // Less than limit means we're at the end of current query
           if (!oldestDate || oldestDate === cursor.dateEnd) {
             cursor.emptyPagesInARow++;
           } else {
             cursor.emptyPagesInARow = 0;
           }
 
-          if (cursor.emptyPagesInARow >= MAX_EMPTY || ids.length === 0) {
+          if (cursor.emptyPagesInARow >= MAX_EMPTY) {
             // Move to next status
             cursor.statusIndex++;
             cursor.offset = 0;
             cursor.dateEnd = null;
+            cursor.scrollId = null;
             cursor.emptyPagesInARow = 0;
-            console.log(`Moving to next status index: ${cursor.statusIndex}`);
+            console.log(`Max empty pages reached, moving to next status index: ${cursor.statusIndex}`);
           } else if (oldestDate && oldestDate !== cursor.dateEnd) {
-            // Move date window back
+            // Move date window back for more items
             cursor.dateEnd = oldestDate;
             cursor.offset = 0;
+            cursor.scrollId = null;
+            console.log(`Moving date window to: ${oldestDate}`);
+          } else {
+            // No more progress possible, move to next status
+            cursor.statusIndex++;
+            cursor.offset = 0;
+            cursor.dateEnd = null;
+            cursor.scrollId = null;
+            cursor.emptyPagesInARow = 0;
+            console.log(`No progress possible, moving to next status index: ${cursor.statusIndex}`);
           }
         } else {
-          // More items in current date window
+          // Full page but no scroll_id, fallback to offset/date pagination
           cursor.offset += LIMIT;
-          if (cursor.offset >= 1000) {
-            // ML offset limit, shift date window
+          if (cursor.offset >= 950) {
+            // Near ML offset limit (1000), shift date window
             if (oldestDate) {
               cursor.dateEnd = oldestDate;
+              console.log(`Offset limit reached, shifting to date: ${oldestDate}`);
             }
             cursor.offset = 0;
+            cursor.scrollId = null;
           }
         }
 
