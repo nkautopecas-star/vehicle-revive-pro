@@ -35,6 +35,42 @@ export type Database = {
         }
         Relationships: []
       }
+      listing_type_rules: {
+        Row: {
+          created_at: string
+          id: string
+          is_default: boolean
+          is_enabled: boolean
+          listing_type: string
+          listing_type_name: string
+          marketplace: string
+          price_variation_percent: number
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          is_default?: boolean
+          is_enabled?: boolean
+          listing_type: string
+          listing_type_name: string
+          marketplace?: string
+          price_variation_percent?: number
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          is_default?: boolean
+          is_enabled?: boolean
+          listing_type?: string
+          listing_type_name?: string
+          marketplace?: string
+          price_variation_percent?: number
+          updated_at?: string
+        }
+        Relationships: []
+      }
       marketplace_accounts: {
         Row: {
           access_token: string | null
