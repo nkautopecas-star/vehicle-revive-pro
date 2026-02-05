@@ -14,6 +14,10 @@
    olx: boolean;
    shopee: boolean;
  }
+
+export interface MarketplaceAccountSelection {
+  mercadolivre_account_id?: string;
+}
  
  export interface PartDimensions {
    peso_gramas?: number;
@@ -40,7 +44,7 @@
    open: boolean;
    onOpenChange: (open: boolean) => void;
    part?: Part | null;
-   onSubmit: (data: ExtendedPartFormData, marketplaces: MarketplaceConfig, newCompatibilities: NewCompatibility[]) => void;
+  onSubmit: (data: ExtendedPartFormData, marketplaces: MarketplaceConfig, newCompatibilities: NewCompatibility[], accountSelection: MarketplaceAccountSelection) => void;
    isLoading?: boolean;
    isDuplicating?: boolean;
  }
@@ -87,6 +91,8 @@
  
    const [newCompatibilities, setNewCompatibilities] = useState<CompatibilityEntry[]>([]);
  
+  const [accountSelection, setAccountSelection] = useState<MarketplaceAccountSelection>({});
+
    const isEditing = part && !isDuplicating;
  
    useEffect(() => {
@@ -133,6 +139,7 @@
      }
      setMarketplaces({ mercadolivre: false, olx: false, shopee: false });
      setNewCompatibilities([]);
+      setAccountSelection({});
      setStep("basic");
    }, [part, open]);
  
@@ -150,7 +157,7 @@
  
    const handleFinalSubmit = () => {
      const compatibilitiesToSave = newCompatibilities.map(({ id, ...rest }) => rest);
-     onSubmit(formData, marketplaces, compatibilitiesToSave);
+    onSubmit(formData, marketplaces, compatibilitiesToSave, accountSelection);
    };
  
    const getProgress = () => {
@@ -216,8 +223,10 @@
                isDuplicating={isDuplicating}
                part={part}
                partId={part?.id}
-             newCompatibilities={newCompatibilities}
-             setNewCompatibilities={setNewCompatibilities}
+                newCompatibilities={newCompatibilities}
+                setNewCompatibilities={setNewCompatibilities}
+                accountSelection={accountSelection}
+                setAccountSelection={setAccountSelection}
              />
            )}
          </div>

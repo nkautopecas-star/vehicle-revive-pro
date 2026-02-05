@@ -18,6 +18,7 @@
  import { ChevronLeft, Loader2, Package, Scale, Ruler, Info } from "lucide-react";
  import { Car, Calendar, AlertCircle } from "lucide-react";
  import type { ExtendedPartFormData, MarketplaceConfig, NewCompatibility } from "../PartFormWizard";
+import type { MarketplaceAccountSelection } from "../PartFormWizard";
  import type { Part } from "@/hooks/useParts";
  import { useMercadoLivre } from "@/hooks/useMercadoLivre";
  import { Badge } from "@/components/ui/badge";
@@ -46,6 +47,8 @@
    partId?: string;
    newCompatibilities: CompatibilityEntry[];
    setNewCompatibilities: (compatibilities: CompatibilityEntry[]) => void;
+  accountSelection: MarketplaceAccountSelection;
+  setAccountSelection: (selection: MarketplaceAccountSelection) => void;
  }
  
  // ML Category mapping based on internal categories
@@ -75,9 +78,16 @@
    partId,
    newCompatibilities,
    setNewCompatibilities,
+  accountSelection,
+  setAccountSelection,
  }: PartMarketplaceStepProps) {
    const { accounts: mlAccounts = [] } = useMercadoLivre();
-   const activeMLAccount = mlAccounts?.find(acc => acc.status === 'active');
+  const activeMLAccounts = mlAccounts?.filter(acc => acc.status === 'active') || [];
+  const hasActiveMLAccount = activeMLAccounts.length > 0;
+
+  // Auto-select first account if only one is available
+  const selectedMLAccountId = accountSelection.mercadolivre_account_id || 
+    (activeMLAccounts.length === 1 ? activeMLAccounts[0].id : undefined);
  
    // Fetch existing compatibilities for the part
    const { data: compatibilities = [] } = usePartCompatibilities(part?.id || partId);
@@ -157,34 +167,60 @@
            <CardContent className="space-y-4">
              <div className="grid grid-cols-3 gap-4">
                {/* Mercado Livre */}
-               <label
-                 className={`flex items-center gap-3 p-4 border rounded-lg cursor-pointer transition-all ${
+                <div
+                  className={`flex flex-col gap-3 p-4 border rounded-lg transition-all ${
                    marketplaces.mercadolivre
                      ? "border-primary bg-primary/5"
                      : "border-border hover:border-primary/50"
-                 } ${!activeMLAccount ? "opacity-50" : ""}`}
+                  } ${!hasActiveMLAccount ? "opacity-50" : ""}`}
                >
-                 <Checkbox
-                   checked={marketplaces.mercadolivre}
-                   onCheckedChange={(checked) =>
-                     setMarketplaces({ ...marketplaces, mercadolivre: !!checked })
-                   }
-                   disabled={!activeMLAccount}
-                 />
-                 <div className="flex-1">
-                   <div className="flex items-center gap-2">
-                     <span className="font-medium text-sm">Mercado Livre</span>
-                     {activeMLAccount && (
-                       <Badge variant="outline" className="text-xs bg-success/10 text-success border-success/30">
-                         Conectado
-                       </Badge>
-                     )}
+                  <label className="flex items-center gap-3 cursor-pointer">
+                    <Checkbox
+                      checked={marketplaces.mercadolivre}
+                      onCheckedChange={(checked) => {
+                        setMarketplaces({ ...marketplaces, mercadolivre: !!checked });
+                        if (checked && activeMLAccounts.length === 1) {
+                          setAccountSelection({ ...accountSelection, mercadolivre_account_id: activeMLAccounts[0].id });
+                        }
+                      }}
+                      disabled={!hasActiveMLAccount}
+                    />
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2">
+                        <span className="font-medium text-sm">Mercado Livre</span>
+                        {hasActiveMLAccount && (
+                          <Badge variant="outline" className="text-xs bg-success/10 text-success border-success/30">
+                            {activeMLAccounts.length} conta{activeMLAccounts.length > 1 ? 's' : ''}
+                          </Badge>
+                        )}
+                      </div>
+                      {!hasActiveMLAccount && (
+                        <p className="text-xs text-muted-foreground">Conecte sua conta</p>
+                      )}
                    </div>
-                   {!activeMLAccount && (
-                     <p className="text-xs text-muted-foreground">Conecte sua conta</p>
-                   )}
-                 </div>
-               </label>
+                  </label>
+
+                  {/* Account selector when multiple accounts */}
+                  {marketplaces.mercadolivre && activeMLAccounts.length > 1 && (
+                    <Select
+                      value={selectedMLAccountId || ""}
+                      onValueChange={(value) => 
+                        setAccountSelection({ ...accountSelection, mercadolivre_account_id: value })
+                      }
+                    >
+                      <SelectTrigger className="w-full">
+                        <SelectValue placeholder="Selecione a conta" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {activeMLAccounts.map((acc) => (
+                          <SelectItem key={acc.id} value={acc.id}>
+                            {acc.nome_conta}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  )}
+                </div>
  
                {/* OLX */}
                <label
@@ -419,7 +455,16 @@
            <Button
              type="button"
              onClick={onSubmit}
-             disabled={isLoading || (marketplaces.mercadolivre && (!formData.peso_gramas || !formData.comprimento_cm || !formData.largura_cm || !formData.altura_cm))}
+              disabled={
+                isLoading || 
+                (marketplaces.mercadolivre && (
+                  !formData.peso_gramas || 
+                  !formData.comprimento_cm || 
+                  !formData.largura_cm || 
+                  !formData.altura_cm ||
+                  (activeMLAccounts.length > 1 && !selectedMLAccountId)
+                ))
+              }
            >
              {isLoading && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
              {isDuplicating
