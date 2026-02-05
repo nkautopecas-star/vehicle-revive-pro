@@ -43,23 +43,10 @@ export function useMercadoLivre() {
       const result = await response.json();
       
       if (result.auth_url) {
-        // In preview/iframe, redirects to external domains may fail.
-        // Prefer opening in a new tab (user-initiated click) with a safe fallback.
-        const opened = window.open(result.auth_url as string, "_blank", "noopener,noreferrer");
-
-        if (!opened) {
-          toast({
-            title: "Pop-up bloqueado",
-            description: "Permita pop-ups para abrir a página de autorização do Mercado Livre.",
-            variant: "destructive",
-          });
-
-          // Fallback to same-tab navigation
-          window.location.href = result.auth_url as string;
-        }
-
-        // Keep UI responsive even if user stays on the app tab.
-        setIsConnecting(false);
+        // Navigate in the same window to ensure OAuth callback is properly captured
+        // This is necessary because when opening in a new tab, the authorization code
+        // is returned to that tab and our app doesn't capture it
+        window.location.href = result.auth_url as string;
       } else {
         throw new Error('No auth URL returned');
       }
