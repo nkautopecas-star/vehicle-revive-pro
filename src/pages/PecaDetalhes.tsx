@@ -36,6 +36,7 @@ import { usePartStockMovements } from "@/hooks/useStockMovements";
 import { PartImageGallery } from "@/components/parts/PartImageGallery";
 import { StockMovementDialog } from "@/components/parts/StockMovementDialog";
 import { PublishToMLButton } from "@/components/parts/PublishToMLButton";
+import { PartMLListings } from "@/components/parts/PartMLListings";
 
 const statusConfig = {
   ativa: { label: "Ativa", className: "bg-success/20 text-success" },
@@ -294,6 +295,9 @@ const PecaDetalhes = () => {
             </CardContent>
           </Card>
         </div>
+
+        {/* ML Listings */}
+        <PartMLListings partId={part.id} />
 
         {/* Image Gallery */}
         <Card>
