@@ -27,7 +27,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Plus, Search, MoreHorizontal, Edit, Trash2, Sparkles, MapPin, Package, Download, FileSpreadsheet, Upload, Car, Eye, Copy, X } from "lucide-react";
+import { Plus, Search, MoreHorizontal, Edit, Trash2, Sparkles, MapPin, Package, Download, FileSpreadsheet, Upload, Car, Eye, Copy, X, ExternalLink } from "lucide-react";
+import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
  import { useParts, useCategories, useCreatePart, useUpdatePart, useDeletePart, type Part } from "@/hooks/useParts";
  import type { ExtendedPartFormData } from "@/hooks/useParts";
@@ -77,6 +78,7 @@ const Pecas = () => {
   const deleteMutation = useDeletePart();
   const createCompatibilityMutation = useCreatePartCompatibility();
    const { createListing, isCreatingListing, accounts: mlAccounts = [] } = useMercadoLivre();
+   const { toast } = useToast();
 
   // Handle edit/duplicate from URL params
   useEffect(() => {
@@ -163,23 +165,54 @@ const Pecas = () => {
               (activeAccounts.length === 1 ? activeAccounts[0].id : undefined);
             
             if (accountId) {
-              createListing({ 
-                accountId, 
-                partId,
-                listingData: {
-                  // Pass selected category
-                  category_id: accountSelection.mercadolivre_category_id || 'MLB1747',
-                  // Pass shipping dimensions
-                  shipping: data.peso_gramas && data.comprimento_cm && data.largura_cm && data.altura_cm ? {
-                    dimensions: {
-                      height: data.altura_cm,
-                      width: data.largura_cm,
-                      length: data.comprimento_cm,
-                    },
-                    weight: data.peso_gramas,
-                  } : undefined,
+              try {
+                const result = await createListing({ 
+                  accountId, 
+                  partId,
+                  listingData: {
+                    // Pass selected category
+                    category_id: accountSelection.mercadolivre_category_id || 'MLB1747',
+                    // Pass shipping dimensions
+                    shipping: data.peso_gramas && data.comprimento_cm && data.largura_cm && data.altura_cm ? {
+                      dimensions: {
+                        height: data.altura_cm,
+                        width: data.largura_cm,
+                        length: data.comprimento_cm,
+                      },
+                      weight: data.peso_gramas,
+                    } : undefined,
+                  }
+                });
+                
+                if (result?.permalink) {
+                  toast({
+                    title: "Anúncio publicado no Mercado Livre!",
+                    description: (
+                      <div className="flex flex-col gap-2">
+                        <span>ID: {result.ml_id}</span>
+                        <a 
+                          href={result.permalink} 
+                          target="_blank" 
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-1 text-primary hover:underline font-medium"
+                        >
+                          <ExternalLink className="w-3 h-3" />
+                          Ver anúncio no Mercado Livre
+                        </a>
+                      </div>
+                    ),
+                    duration: 10000, // 10 seconds to give time to click
+                  });
+                } else {
+                  toast({
+                    title: "Anúncio criado!",
+                    description: "O anúncio foi publicado no Mercado Livre",
+                  });
                 }
-              });
+              } catch (error) {
+                // Error toast is already shown by useMercadoLivre hook
+                console.error('Failed to create ML listing:', error);
+              }
             }
           }
       },
