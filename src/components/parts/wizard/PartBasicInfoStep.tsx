@@ -131,23 +131,35 @@ export function PartBasicInfoStep({
        </DialogHeader>
  
        <div className="grid gap-4 py-4">
-         {/* OEM Code - First field */}
-         <div className="grid grid-cols-2 gap-4">
-           <div className="space-y-2">
-             <Label htmlFor="codigoOEM" className="flex items-center gap-2">
-               Código OEM
-               {isSuggesting && <Loader2 className="w-3 h-3 animate-spin text-primary" />}
-             </Label>
-             <Input
-               id="codigoOEM"
-               placeholder="11000-PNB-A00"
-               value={formData.codigo_oem}
-               onChange={(e) =>
-                 setFormData({ ...formData, codigo_oem: e.target.value })
-               }
-               onBlur={handleOEMBlur}
-             />
-           </div>
+          {/* OEM Code - First field */}
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label htmlFor="codigoOEM" className="flex items-center gap-2">
+                Código OEM
+                {isSuggesting && <Loader2 className="w-3 h-3 animate-spin text-primary" />}
+              </Label>
+              <div className="flex gap-2">
+                <Input
+                  id="codigoOEM"
+                  placeholder="11000-PNB-A00"
+                  value={formData.codigo_oem}
+                  onChange={(e) =>
+                    setFormData({ ...formData, codigo_oem: e.target.value })
+                  }
+                  onBlur={handleOEMBlur}
+                />
+                <Button
+                  type="button"
+                  size="icon"
+                  variant="outline"
+                  onClick={() => suggestFromOEM(formData.codigo_oem, vehicleInfo, categoryName).then(r => r && setShowSuggestion(true))}
+                  disabled={isSuggesting || !formData.codigo_oem || formData.codigo_oem.trim().length < 3}
+                  title="Buscar sugestão da IA"
+                >
+                  <Sparkles className="w-4 h-4" />
+                </Button>
+              </div>
+            </div>
            <div className="space-y-2">
              <Label htmlFor="codigoInterno">Código Interno</Label>
              <Input
