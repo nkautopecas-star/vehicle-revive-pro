@@ -1,54 +1,55 @@
- import { useState, useEffect } from "react";
- import {
-   Dialog,
-   DialogContent,
- } from "@/components/ui/dialog";
- import { useCategories, useVehiclesForSelect, type Part, type PartFormData } from "@/hooks/useParts";
- import { PartBasicInfoStep } from "./wizard/PartBasicInfoStep";
- import { PartMarketplaceStep } from "./wizard/PartMarketplaceStep";
- import { Progress } from "@/components/ui/progress";
- import type { CompatibilityEntry } from "./wizard/CompatibilityInlineForm";
- 
- export interface MarketplaceConfig {
-   mercadolivre: boolean;
-   olx: boolean;
-   shopee: boolean;
- }
+import { useState, useEffect } from "react";
+import {
+  Dialog,
+  DialogContent,
+} from "@/components/ui/dialog";
+import { useCategories, useVehiclesForSelect, type Part, type PartFormData } from "@/hooks/useParts";
+import { PartBasicInfoStep } from "./wizard/PartBasicInfoStep";
+import { PartMarketplaceStep } from "./wizard/PartMarketplaceStep";
+import { Progress } from "@/components/ui/progress";
+import type { CompatibilityEntry } from "./wizard/CompatibilityInlineForm";
+import type { PendingImage } from "./WizardImageUpload";
+
+export interface MarketplaceConfig {
+  mercadolivre: boolean;
+  olx: boolean;
+  shopee: boolean;
+}
 
 export interface MarketplaceAccountSelection {
   mercadolivre_account_id?: string;
   mercadolivre_category_id?: string;
 }
  
- export interface PartDimensions {
-   peso_gramas?: number;
-   comprimento_cm?: number;
-   largura_cm?: number;
-   altura_cm?: number;
- }
+export interface PartDimensions {
+  peso_gramas?: number;
+  comprimento_cm?: number;
+  largura_cm?: number;
+  altura_cm?: number;
+}
  
- export interface ExtendedPartFormData extends PartFormData {
-   peso_gramas?: number;
-   comprimento_cm?: number;
-   largura_cm?: number;
-   altura_cm?: number;
- }
+export interface ExtendedPartFormData extends PartFormData {
+  peso_gramas?: number;
+  comprimento_cm?: number;
+  largura_cm?: number;
+  altura_cm?: number;
+}
  
- export interface NewCompatibility {
-   marca: string;
-   modelo: string;
-   ano_inicio: number | null;
-   ano_fim: number | null;
- }
+export interface NewCompatibility {
+  marca: string;
+  modelo: string;
+  ano_inicio: number | null;
+  ano_fim: number | null;
+}
  
- interface PartFormWizardProps {
-   open: boolean;
-   onOpenChange: (open: boolean) => void;
-   part?: Part | null;
-  onSubmit: (data: ExtendedPartFormData, marketplaces: MarketplaceConfig, newCompatibilities: NewCompatibility[], accountSelection: MarketplaceAccountSelection) => void;
-   isLoading?: boolean;
-   isDuplicating?: boolean;
- }
+interface PartFormWizardProps {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  part?: Part | null;
+  onSubmit: (data: ExtendedPartFormData, marketplaces: MarketplaceConfig, newCompatibilities: NewCompatibility[], accountSelection: MarketplaceAccountSelection, pendingImages: PendingImage[]) => void;
+  isLoading?: boolean;
+  isDuplicating?: boolean;
+}
  
  type WizardStep = "basic" | "marketplace";
  
@@ -90,9 +91,11 @@ export interface MarketplaceAccountSelection {
      shopee: false,
    });
  
-   const [newCompatibilities, setNewCompatibilities] = useState<CompatibilityEntry[]>([]);
- 
+  const [newCompatibilities, setNewCompatibilities] = useState<CompatibilityEntry[]>([]);
+
   const [accountSelection, setAccountSelection] = useState<MarketplaceAccountSelection>({});
+
+  const [pendingImages, setPendingImages] = useState<PendingImage[]>([]);
 
    const isEditing = part && !isDuplicating;
  
@@ -138,11 +141,14 @@ export interface MarketplaceAccountSelection {
          altura_cm: undefined,
        });
      }
-     setMarketplaces({ mercadolivre: false, olx: false, shopee: false });
-     setNewCompatibilities([]);
-      setAccountSelection({});
-     setStep("basic");
-   }, [part, open]);
+    setMarketplaces({ mercadolivre: false, olx: false, shopee: false });
+    setNewCompatibilities([]);
+    setAccountSelection({});
+    // Clean up pending image URLs
+    pendingImages.forEach(img => URL.revokeObjectURL(img.previewUrl));
+    setPendingImages([]);
+    setStep("basic");
+  }, [part, open]);
  
    const handleNextStep = () => {
      if (step === "basic") {
@@ -156,10 +162,10 @@ export interface MarketplaceAccountSelection {
      }
    };
  
-   const handleFinalSubmit = () => {
-     const compatibilitiesToSave = newCompatibilities.map(({ id, ...rest }) => rest);
-    onSubmit(formData, marketplaces, compatibilitiesToSave, accountSelection);
-   };
+  const handleFinalSubmit = () => {
+    const compatibilitiesToSave = newCompatibilities.map(({ id, ...rest }) => rest);
+    onSubmit(formData, marketplaces, compatibilitiesToSave, accountSelection, pendingImages);
+  };
  
    const getProgress = () => {
      switch (step) {
@@ -195,20 +201,22 @@ export interface MarketplaceAccountSelection {
              <Progress value={getProgress()} className="h-2" />
            </div>
  
-           {step === "basic" && (
-             <PartBasicInfoStep
-               formData={formData}
-               setFormData={setFormData}
-               categories={categories}
-               vehicles={vehicles}
-               isEditing={!!isEditing}
-               isDuplicating={isDuplicating}
-               isLoading={isLoading}
-               onNext={handleNextStep}
-               onCancel={() => onOpenChange(false)}
-               part={part}
-             />
-           )}
+          {step === "basic" && (
+            <PartBasicInfoStep
+              formData={formData}
+              setFormData={setFormData}
+              categories={categories}
+              vehicles={vehicles}
+              isEditing={!!isEditing}
+              isDuplicating={isDuplicating}
+              isLoading={isLoading}
+              onNext={handleNextStep}
+              onCancel={() => onOpenChange(false)}
+              part={part}
+              pendingImages={pendingImages}
+              onPendingImagesChange={setPendingImages}
+            />
+          )}
  
            {step === "marketplace" && (
              <PartMarketplaceStep
