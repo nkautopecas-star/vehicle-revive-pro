@@ -489,104 +489,117 @@ serve(async (req) => {
           const mlUserId = mlUser.id;
           console.log('ML User ID:', mlUserId);
 
-          // Fetch ALL items from ML using scroll_id for pagination beyond 1000 offset limit
+          // Fetch ALL items from ML using date-based pagination
+          // ML limits offset to 1000. To get ALL items, we paginate by date_created.
           const limit = 50;
           let allItems: any[] = [];
-          // Include 'sold' status to get complete catalog
+          // Include 'closed' status to get sold items
           const statuses = ['active', 'paused', 'closed'];
+          // Track all processed IDs globally to avoid duplicates across statuses
+          const globalProcessedIds = new Set<string>();
           
           for (const status of statuses) {
-            let offset = 0;
-            let scrollId: string | null = null;
             let hasMore = true;
-            let processedIds = new Set<string>(); // Track processed IDs to avoid duplicates
+            let statusTotal = 0;
+            let dateEnd: string | null = null; // Will hold the oldest date found
+            let emptyPagesInARow = 0;
+            const MAX_EMPTY_PAGES = 3;
             
             console.log(`Starting to fetch all ${status} items...`);
             
             while (hasMore) {
-              let endpoint: string;
+              let offset = 0;
+              let pageHasMore = true;
+              let oldestDateInPage: string | null = null;
               
-              // Use search_type=scan for more reliable pagination
-              if (scrollId) {
-                endpoint = `/users/${mlUserId}/items/search?status=${status}&scroll_id=${scrollId}`;
-              } else {
-                endpoint = `/users/${mlUserId}/items/search?status=${status}&offset=${offset}&limit=${limit}&search_type=scan`;
-              }
-              
-              let searchResult;
-              try {
-                searchResult = await mlApiCall(endpoint, accessToken, {}, retryContext);
-              } catch (error) {
-                console.log(`Error fetching ${status} items at offset ${offset}:`, error);
-                break;
-              }
-              
-              const results = searchResult.results || [];
-              
-              // Filter out already processed IDs (can happen with scroll_id)
-              const newIds = results.filter((id: string) => !processedIds.has(id));
-              newIds.forEach((id: string) => processedIds.add(id));
-              
-              console.log(`Fetched ${results.length} ${status} item IDs (${newIds.length} new, offset: ${offset})`);
-              
-              if (newIds.length === 0) {
-                // No new items, stop
-                hasMore = false;
-                break;
-              }
-              
-              // Get scroll_id for next page if available
-              if (searchResult.scroll_id) {
-                scrollId = searchResult.scroll_id;
-              }
-              
-              // Get full item details in batches of 20
-              for (let i = 0; i < newIds.length; i += 20) {
-                const batch = newIds.slice(i, i + 20);
-                try {
-                  const itemsResponse = await mlApiCall(
-                    `/items?ids=${batch.join(',')}`,
-                    accessToken,
-                    {},
-                    retryContext
-                  );
-                  
-                  for (const itemData of itemsResponse) {
-                    if (itemData.code === 200 && itemData.body) {
-                      allItems.push(itemData.body);
-                    }
-                  }
-                } catch (error) {
-                  console.error(`Error fetching item details batch:`, error);
+              // Fetch up to 1000 items per date range (20 pages of 50)
+              while (pageHasMore && offset < 1000) {
+                let endpoint = `/users/${mlUserId}/items/search?status=${status}&offset=${offset}&limit=${limit}&sort=date_created_desc`;
+                
+                // Add date filter if we're past the first batch
+                if (dateEnd) {
+                  endpoint += `&date_created_to=${encodeURIComponent(dateEnd)}`;
                 }
                 
-                // Small delay to avoid rate limiting
-                await new Promise(resolve => setTimeout(resolve, 100));
-              }
-              
-              // Update job with total items found so far
-              await updateJobProgress({ total_items: allItems.length });
-              
-              // Check if we should continue
-              const total = searchResult.paging?.total || 0;
-              const fetched = processedIds.size;
-              
-              if (results.length < limit || fetched >= total) {
-                hasMore = false;
-              } else {
-                offset += limit;
-                // If we have scroll_id, we can go beyond 1000
-                // Otherwise, stop at 1000
-                if (offset >= 1000 && !scrollId) {
-                  console.log(`Reached offset limit of 1000 for ${status} without scroll_id. Total from API: ${total}`);
-                  hasMore = false;
+                let searchResult;
+                try {
+                  searchResult = await mlApiCall(endpoint, accessToken, {}, retryContext);
+                } catch (error) {
+                  console.log(`Error fetching ${status} items at offset ${offset}:`, error);
+                  pageHasMore = false;
+                  break;
+                }
+                
+                const results = searchResult.results || [];
+                statusTotal = searchResult.paging?.total || 0;
+                
+                // Filter out already processed IDs
+                const newIds = results.filter((id: string) => !globalProcessedIds.has(id));
+                newIds.forEach((id: string) => globalProcessedIds.add(id));
+                
+                console.log(`Fetched ${results.length} ${status} items (${newIds.length} new, offset: ${offset}, total: ${statusTotal})`);
+                
+                // Get item details and track oldest date
+                for (let i = 0; i < newIds.length; i += 20) {
+                  const batch = newIds.slice(i, i + 20);
+                  try {
+                    const itemsResponse = await mlApiCall(
+                      `/items?ids=${batch.join(',')}&attributes=id,title,price,status,date_created,thumbnail,pictures`,
+                      accessToken,
+                      {},
+                      retryContext
+                    );
+                    
+                    for (const itemData of itemsResponse) {
+                      if (itemData.code === 200 && itemData.body) {
+                        allItems.push(itemData.body);
+                        // Track oldest date for next iteration
+                        if (itemData.body.date_created) {
+                          if (!oldestDateInPage || itemData.body.date_created < oldestDateInPage) {
+                            oldestDateInPage = itemData.body.date_created;
+                          }
+                        }
+                      }
+                    }
+                  } catch (error) {
+                    console.error(`Error fetching item details batch:`, error);
+                  }
+                  
+                  await new Promise(resolve => setTimeout(resolve, 50));
+                }
+                
+                // Update progress
+                await updateJobProgress({ total_items: allItems.length });
+                
+                // Check if we should continue this page
+                if (results.length < limit) {
+                  pageHasMore = false;
+                } else {
+                  offset += limit;
                 }
               }
               
-              console.log(`Progress: ${allItems.length} total items fetched (${fetched}/${total} for ${status})...`);
+              // Check if we got any new items in this date range
+              if (!oldestDateInPage || oldestDateInPage === dateEnd) {
+                emptyPagesInARow++;
+                if (emptyPagesInARow >= MAX_EMPTY_PAGES) {
+                  console.log(`No new items for ${status} after ${MAX_EMPTY_PAGES} attempts, moving on`);
+                  hasMore = false;
+                }
+              } else {
+                emptyPagesInARow = 0;
+                dateEnd = oldestDateInPage; // Move date window back
+              }
+              
+              // If we fetched less than 1000 in this date range, we're done
+              if (offset < 1000) {
+                hasMore = false;
+              }
+              
+              console.log(`Progress: ${allItems.length} total fetched for ${status}, oldest: ${dateEnd || 'n/a'}`);
             }
             
-            console.log(`Completed ${status}: fetched items, total now: ${allItems.length}`);
+            console.log(`Completed ${status}: ${allItems.length} total fetched`);
           }
 
           console.log(`Total items fetched from ML: ${allItems.length}`);
