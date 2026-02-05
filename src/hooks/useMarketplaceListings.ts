@@ -32,6 +32,8 @@ interface UseMarketplaceListingsOptions {
   search?: string;
   page?: number;
   pageSize?: number;
+  sortBy?: 'created_at' | 'updated_at' | 'preco' | 'titulo';
+  sortOrder?: 'asc' | 'desc';
 }
 
 export interface PaginatedListingsResult {
@@ -43,10 +45,18 @@ export interface PaginatedListingsResult {
 }
 
 export function useMarketplaceListings(options: UseMarketplaceListingsOptions = {}) {
-  const { accountId, status, search, page = 1, pageSize = 20 } = options;
+  const { 
+    accountId, 
+    status, 
+    search, 
+    page = 1, 
+    pageSize = 20,
+    sortBy = 'created_at',
+    sortOrder = 'desc',
+  } = options;
 
   return useQuery({
-    queryKey: ["marketplace-listings", accountId, status, search, page, pageSize],
+    queryKey: ["marketplace-listings", accountId, status, search, page, pageSize, sortBy, sortOrder],
     queryFn: async (): Promise<PaginatedListingsResult> => {
       // First, get the total count
       let countQuery = supabase
@@ -82,7 +92,7 @@ export function useMarketplaceListings(options: UseMarketplaceListingsOptions = 
           marketplace_account:marketplace_accounts(id, nome_conta, marketplace),
           part:parts(id, nome, codigo_interno)
         `)
-        .order("created_at", { ascending: false })
+        .order(sortBy, { ascending: sortOrder === 'asc' })
         .range(from, to);
 
       if (accountId) {
