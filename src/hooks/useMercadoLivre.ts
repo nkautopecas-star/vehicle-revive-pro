@@ -170,6 +170,28 @@ export function useMercadoLivre() {
       queryClient.invalidateQueries({ queryKey: ['marketplace-listings'] });
     },
     onError: (error) => {
+      // Check for specific error types from ml-sync edge function
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      
+      if (errorMessage.includes('PICTURES_REQUIRED')) {
+        toast({
+          title: "Fotos obrigatórias",
+          description: "O Mercado Livre exige pelo menos uma foto para anunciar nesta categoria. Adicione fotos à peça e tente novamente.",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      if (errorMessage.includes('ML_VALIDATION')) {
+        const details = errorMessage.replace('ML_VALIDATION: ', '');
+        toast({
+          title: "Erro de validação do Mercado Livre",
+          description: details.length > 100 ? details.substring(0, 100) + '...' : details,
+          variant: "destructive",
+        });
+        return;
+      }
+
       toast({
         title: "Erro ao criar anúncio",
         description: "Não foi possível publicar no Mercado Livre",
