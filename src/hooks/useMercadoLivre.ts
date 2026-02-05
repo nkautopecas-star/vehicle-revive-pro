@@ -117,30 +117,45 @@ export function useMercadoLivre() {
     }
   };
 
-  // Sync all listings
+  // Sync all listings — now loops until done
   const syncMutation = useMutation({
     mutationFn: async (accountId: string) => {
-      const { data, error } = await supabase.functions.invoke('ml-sync', {
-        body: {
-          action: 'sync_all',
-          account_id: accountId,
-        },
-      });
+      let synced = 0;
+      let hasMore = true;
 
-      if (error) throw error;
-      return data;
+      while (hasMore) {
+        const { data, error } = await supabase.functions.invoke('ml-sync', {
+          body: {
+            action: 'sync_all',
+            account_id: accountId,
+          },
+        });
+
+        if (error) throw error;
+
+        synced = data.synced ?? synced;
+        hasMore = data.has_more === true;
+
+        // Small delay to avoid hammering the edge function
+        if (hasMore) {
+          await new Promise(r => setTimeout(r, 500));
+        }
+      }
+
+      return { synced };
     },
     onSuccess: (data) => {
       toast({
         title: "Sincronização concluída",
-        description: `${data.synced} de ${data.total} anúncios sincronizados`,
+        description: `${data.synced} anúncios sincronizados`,
       });
       queryClient.invalidateQueries({ queryKey: ['ml-accounts'] });
+      queryClient.invalidateQueries({ queryKey: ['marketplace-listings'] });
     },
     onError: (error) => {
       toast({
         title: "Erro na sincronização",
-        description: "Não foi possível sincronizar os anúncios",
+        description: error instanceof Error ? error.message : "Não foi possível sincronizar os anúncios",
         variant: "destructive",
       });
     },
