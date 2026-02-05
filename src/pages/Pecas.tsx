@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Table,
   TableBody,
@@ -27,7 +28,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Plus, Search, MoreHorizontal, Edit, Trash2, Sparkles, MapPin, Package, Download, FileSpreadsheet, Upload, Car, Eye, Copy, X, ExternalLink } from "lucide-react";
+import { Plus, Search, MoreHorizontal, Edit, Trash2, Sparkles, MapPin, Package, Download, FileSpreadsheet, Upload, Car, Eye, Copy, X, ExternalLink, CheckSquare, Square } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { useParts, useCategories, useCreatePart, useUpdatePart, useDeletePart, type Part } from "@/hooks/useParts";
@@ -74,6 +75,8 @@ const Pecas = () => {
   const [duplicatingPart, setDuplicatingPart] = useState<Part | null>(null);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [partToDelete, setPartToDelete] = useState<Part | null>(null);
+  const [partsToDelete, setPartsToDelete] = useState<Part[]>([]);
+  const [selectedParts, setSelectedParts] = useState<Set<string>>(new Set());
   const [isImportDialogOpen, setIsImportDialogOpen] = useState(false);
   
   // Image upload progress state
@@ -335,17 +338,74 @@ const Pecas = () => {
 
   const handleDeleteClick = (part: Part) => {
     setPartToDelete(part);
+    setPartsToDelete([]);
     setDeleteDialogOpen(true);
   };
 
-  const handleConfirmDelete = () => {
-    if (!partToDelete) return;
-    deleteMutation.mutate(partToDelete.id, {
-      onSuccess: () => {
-        setDeleteDialogOpen(false);
-        setPartToDelete(null);
-      },
+  const handleBulkDeleteClick = () => {
+    const partsToDeleteArray = filteredParts.filter(p => selectedParts.has(p.id));
+    setPartsToDelete(partsToDeleteArray);
+    setPartToDelete(null);
+    setDeleteDialogOpen(true);
+  };
+
+  const handleConfirmDelete = async () => {
+    if (partsToDelete.length > 0) {
+      // Bulk delete
+      let successCount = 0;
+      for (const part of partsToDelete) {
+        try {
+          await new Promise<void>((resolve, reject) => {
+            deleteMutation.mutate(part.id, {
+              onSuccess: () => resolve(),
+              onError: reject,
+            });
+          });
+          successCount++;
+        } catch (error) {
+          console.error(`Failed to delete part ${part.id}:`, error);
+        }
+      }
+      setDeleteDialogOpen(false);
+      setPartsToDelete([]);
+      setSelectedParts(new Set());
+      toast({
+        title: "Peças excluídas",
+        description: `${successCount} peça(s) excluída(s) com sucesso.`,
+      });
+    } else if (partToDelete) {
+      // Single delete
+      deleteMutation.mutate(partToDelete.id, {
+        onSuccess: () => {
+          setDeleteDialogOpen(false);
+          setPartToDelete(null);
+        },
+      });
+    }
+  };
+
+  const togglePartSelection = (partId: string) => {
+    setSelectedParts(prev => {
+      const next = new Set(prev);
+      if (next.has(partId)) {
+        next.delete(partId);
+      } else {
+        next.add(partId);
+      }
+      return next;
     });
+  };
+
+  const toggleSelectAll = () => {
+    if (selectedParts.size === filteredParts.length) {
+      setSelectedParts(new Set());
+    } else {
+      setSelectedParts(new Set(filteredParts.map(p => p.id)));
+    }
+  };
+
+  const clearSelection = () => {
+    setSelectedParts(new Set());
   };
 
   const handleDialogClose = (open: boolean) => {
@@ -525,12 +585,54 @@ const Pecas = () => {
           </Card>
         </div>
 
+        {/* Selection Bar */}
+        {selectedParts.size > 0 && (
+          <Card className="p-3 bg-primary/10 border-primary/30">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <Checkbox 
+                  checked={selectedParts.size === filteredParts.length}
+                  onCheckedChange={toggleSelectAll}
+                />
+                <span className="text-sm font-medium">
+                  {selectedParts.size} peça{selectedParts.size > 1 ? 's' : ''} selecionada{selectedParts.size > 1 ? 's' : ''}
+                </span>
+              </div>
+              <div className="flex gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={clearSelection}
+                >
+                  <X className="w-4 h-4 mr-1" />
+                  Limpar seleção
+                </Button>
+                <Button
+                  variant="destructive"
+                  size="sm"
+                  onClick={handleBulkDeleteClick}
+                >
+                  <Trash2 className="w-4 h-4 mr-1" />
+                  Excluir selecionadas
+                </Button>
+              </div>
+            </div>
+          </Card>
+        )}
+
         {/* Table */}
         <Card>
           <CardContent className="p-0">
             <Table>
               <TableHeader>
                 <TableRow className="hover:bg-transparent border-border">
+                  <TableHead className="w-12">
+                    <Checkbox 
+                      checked={filteredParts.length > 0 && selectedParts.size === filteredParts.length}
+                      onCheckedChange={toggleSelectAll}
+                      disabled={filteredParts.length === 0}
+                    />
+                  </TableHead>
                   <TableHead className="text-muted-foreground">Peça</TableHead>
                   <TableHead className="text-muted-foreground">Códigos</TableHead>
                   <TableHead className="text-muted-foreground">Veículo</TableHead>
@@ -546,6 +648,7 @@ const Pecas = () => {
                 {isLoading ? (
                   Array.from({ length: 5 }).map((_, i) => (
                     <TableRow key={i} className="border-border">
+                      <TableCell><Skeleton className="h-4 w-4" /></TableCell>
                       <TableCell><Skeleton className="h-10 w-32" /></TableCell>
                       <TableCell><Skeleton className="h-8 w-24" /></TableCell>
                       <TableCell><Skeleton className="h-4 w-32" /></TableCell>
@@ -559,7 +662,7 @@ const Pecas = () => {
                   ))
                 ) : filteredParts.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={9} className="text-center py-12 text-muted-foreground">
+                    <TableCell colSpan={10} className="text-center py-12 text-muted-foreground">
                       {parts.length === 0 
                         ? "Nenhuma peça cadastrada. Clique em 'Nova Peça' para começar."
                         : "Nenhuma peça encontrada com os filtros aplicados."}
@@ -567,7 +670,19 @@ const Pecas = () => {
                   </TableRow>
                 ) : (
                   filteredParts.map((part) => (
-                    <TableRow key={part.id} className="border-border hover:bg-muted/50">
+                    <TableRow 
+                      key={part.id} 
+                      className={cn(
+                        "border-border hover:bg-muted/50",
+                        selectedParts.has(part.id) && "bg-primary/5"
+                      )}
+                    >
+                      <TableCell onClick={(e) => e.stopPropagation()}>
+                        <Checkbox 
+                          checked={selectedParts.has(part.id)}
+                          onCheckedChange={() => togglePartSelection(part.id)}
+                        />
+                      </TableCell>
                       <TableCell>
                         <Link to={`/pecas/${part.id}`} className="flex items-center gap-3 hover:opacity-80 transition-opacity">
                           <PartThumbnail partId={part.id} partName={part.nome} />
@@ -676,7 +791,8 @@ const Pecas = () => {
       <DeletePartDialog
         open={deleteDialogOpen}
         onOpenChange={setDeleteDialogOpen}
-        partName={partToDelete?.nome || ""}
+        partName={partToDelete?.nome}
+        partNames={partsToDelete.length > 0 ? partsToDelete.map(p => p.nome) : undefined}
         onConfirm={handleConfirmDelete}
         isLoading={deleteMutation.isPending}
       />
