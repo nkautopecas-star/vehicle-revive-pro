@@ -10,6 +10,7 @@ import { Progress } from "@/components/ui/progress";
 import type { CompatibilityEntry } from "./wizard/CompatibilityInlineForm";
 import type { PendingImage } from "./WizardImageUpload";
 import type { CompatibilitySuggestion } from "@/hooks/useSuggestPartInfo";
+import { toast } from "sonner";
 
 export interface MarketplaceConfig {
   mercadolivre: boolean;
@@ -226,6 +227,20 @@ interface PartFormWizardProps {
                   ano_fim: s.ano_fim || null,
                 }));
                 setNewCompatibilities(prev => [...prev, ...newEntries]);
+                
+                // Show visual feedback
+                if (suggestions.length > 0) {
+                  const compatList = suggestions
+                    .map(s => `${s.marca} ${s.modelo}`)
+                    .join(", ");
+                  toast.success(
+                    `${suggestions.length} compatibilidade${suggestions.length > 1 ? 's' : ''} adicionada${suggestions.length > 1 ? 's' : ''}`,
+                    {
+                      description: compatList,
+                      duration: 4000,
+                    }
+                  );
+                }
               }}
             />
           )}
