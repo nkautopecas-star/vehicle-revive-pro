@@ -1,10 +1,12 @@
- import { useState } from "react";
+ import { useState, useCallback } from "react";
  import { Button } from "@/components/ui/button";
  import { Input } from "@/components/ui/input";
  import { Label } from "@/components/ui/label";
  import { Badge } from "@/components/ui/badge";
  import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
- import { Plus, X, Car, Trash2 } from "lucide-react";
+ import { Plus, X, Car, Sparkles, Loader2, Check } from "lucide-react";
+ import { supabase } from "@/integrations/supabase/client";
+ import { toast } from "sonner";
  
  export interface CompatibilityEntry {
    id: string;
@@ -14,22 +16,40 @@
    ano_fim: number | null;
  }
  
+ export interface AISuggestion {
+   marca: string;
+   modelo: string;
+   ano_inicio?: number;
+   ano_fim?: number;
+   observacoes?: string;
+ }
+ 
  interface CompatibilityInlineFormProps {
    compatibilities: CompatibilityEntry[];
    onAdd: (compat: Omit<CompatibilityEntry, "id">) => void;
    onRemove: (id: string) => void;
+   partName?: string;
+   vehicleInfo?: string;
+   categoryName?: string;
  }
  
  export function CompatibilityInlineForm({
    compatibilities,
    onAdd,
    onRemove,
+   partName,
+   vehicleInfo,
+   categoryName,
  }: CompatibilityInlineFormProps) {
    const [isAdding, setIsAdding] = useState(false);
    const [marca, setMarca] = useState("");
    const [modelo, setModelo] = useState("");
    const [anoInicio, setAnoInicio] = useState<string>("");
    const [anoFim, setAnoFim] = useState<string>("");
+ 
+   const [isLoadingSuggestions, setIsLoadingSuggestions] = useState(false);
+   const [suggestions, setSuggestions] = useState<AISuggestion[]>([]);
+   const [showSuggestions, setShowSuggestions] = useState(false);
  
    const handleAdd = () => {
      if (!marca.trim() || !modelo.trim()) return;
@@ -56,6 +76,76 @@
      return "";
    };
  
+   const handleSuggestWithAI = useCallback(async () => {
+     if (!partName?.trim()) {
+       toast.error("Preencha o nome da peça para sugerir compatibilidades");
+       return;
+     }
+ 
+     setIsLoadingSuggestions(true);
+     setSuggestions([]);
+     setShowSuggestions(true);
+ 
+     try {
+       const { data, error } = await supabase.functions.invoke("suggest-compatibilities", {
+         body: {
+           partName: partName,
+           vehicleInfo: vehicleInfo || categoryName || "",
+           existingCompatibilities: compatibilities,
+         },
+       });
+ 
+       if (error) {
+         console.error("Error fetching suggestions:", error);
+         toast.error("Erro ao buscar sugestões. Tente novamente.");
+         setShowSuggestions(false);
+         return;
+       }
+ 
+       if (data?.suggestions && data.suggestions.length > 0) {
+         setSuggestions(data.suggestions);
+         toast.success(`${data.suggestions.length} sugestões encontradas!`);
+       } else {
+         toast.info("Nenhuma sugestão encontrada para esta peça.");
+         setShowSuggestions(false);
+       }
+     } catch (err) {
+       console.error("Error:", err);
+       toast.error("Erro ao conectar com a IA. Tente novamente.");
+       setShowSuggestions(false);
+     } finally {
+       setIsLoadingSuggestions(false);
+     }
+   }, [partName, vehicleInfo, categoryName, compatibilities]);
+ 
+   const handleAcceptSuggestion = (suggestion: AISuggestion) => {
+     onAdd({
+       marca: suggestion.marca,
+       modelo: suggestion.modelo,
+       ano_inicio: suggestion.ano_inicio || null,
+       ano_fim: suggestion.ano_fim || null,
+     });
+     // Remove from suggestions list
+     setSuggestions(prev => prev.filter(s => 
+       !(s.marca === suggestion.marca && s.modelo === suggestion.modelo)
+     ));
+     toast.success(`${suggestion.marca} ${suggestion.modelo} adicionado!`);
+   };
+ 
+   const handleAcceptAllSuggestions = () => {
+     suggestions.forEach(suggestion => {
+       onAdd({
+         marca: suggestion.marca,
+         modelo: suggestion.modelo,
+         ano_inicio: suggestion.ano_inicio || null,
+         ano_fim: suggestion.ano_fim || null,
+       });
+     });
+     setSuggestions([]);
+     setShowSuggestions(false);
+     toast.success("Todas as sugestões foram adicionadas!");
+   };
+ 
    return (
      <Card>
        <CardHeader className="pb-3">
@@ -69,7 +159,25 @@
                Informe os veículos compatíveis com esta peça
              </CardDescription>
            </div>
-           {!isAdding && (
+           <div className="flex gap-2">
+             {!isAdding && !showSuggestions && (
+               <Button
+                 type="button"
+                 variant="outline"
+                 size="sm"
+                 onClick={handleSuggestWithAI}
+                 disabled={isLoadingSuggestions || !partName?.trim()}
+                 className="gap-2"
+               >
+                 {isLoadingSuggestions ? (
+                   <Loader2 className="w-4 h-4 animate-spin" />
+                 ) : (
+                   <Sparkles className="w-4 h-4" />
+                 )}
+                 Sugerir com IA
+               </Button>
+             )}
+             {!isAdding && !showSuggestions && (
              <Button
                type="button"
                variant="outline"
@@ -80,10 +188,80 @@
                <Plus className="w-4 h-4" />
                Adicionar
              </Button>
-           )}
+             )}
+           </div>
          </div>
        </CardHeader>
        <CardContent className="space-y-4">
+         {/* AI Suggestions */}
+         {showSuggestions && (
+           <div className="p-4 border rounded-lg bg-primary/5 border-primary/20 space-y-4">
+             <div className="flex items-center justify-between">
+               <div className="flex items-center gap-2 text-sm font-medium">
+                 <Sparkles className="w-4 h-4 text-primary" />
+                 Sugestões da IA
+               </div>
+               <div className="flex gap-2">
+                 {suggestions.length > 0 && (
+                   <Button
+                     type="button"
+                     size="sm"
+                     variant="default"
+                     onClick={handleAcceptAllSuggestions}
+                     className="gap-2"
+                   >
+                     <Check className="w-4 h-4" />
+                     Aceitar Todas
+                   </Button>
+                 )}
+                 <Button
+                   type="button"
+                   size="sm"
+                   variant="ghost"
+                   onClick={() => {
+                     setShowSuggestions(false);
+                     setSuggestions([]);
+                   }}
+                 >
+                   Fechar
+                 </Button>
+               </div>
+             </div>
+ 
+             {isLoadingSuggestions ? (
+               <div className="flex items-center justify-center py-6 gap-2 text-muted-foreground">
+                 <Loader2 className="w-5 h-5 animate-spin" />
+                 <span>Analisando compatibilidades...</span>
+               </div>
+             ) : suggestions.length > 0 ? (
+               <div className="flex flex-wrap gap-2">
+                 {suggestions.map((suggestion, idx) => (
+                   <Badge
+                     key={`${suggestion.marca}-${suggestion.modelo}-${idx}`}
+                     variant="outline"
+                     className="text-sm py-2 px-3 gap-2 cursor-pointer hover:bg-primary/10 border-primary/30 transition-colors"
+                     onClick={() => handleAcceptSuggestion(suggestion)}
+                   >
+                     <Plus className="w-3 h-3" />
+                     <span>
+                       {suggestion.marca} {suggestion.modelo}
+                       {(suggestion.ano_inicio || suggestion.ano_fim) && (
+                         <span className="ml-1 opacity-70">
+                           ({suggestion.ano_inicio || "?"} - {suggestion.ano_fim || "?"})
+                         </span>
+                       )}
+                     </span>
+                   </Badge>
+                 ))}
+               </div>
+             ) : (
+               <p className="text-sm text-muted-foreground text-center py-4">
+                 Nenhuma sugestão encontrada.
+               </p>
+             )}
+           </div>
+         )}
+ 
          {/* Add Form */}
          {isAdding && (
            <div className="p-4 border rounded-lg bg-muted/30 space-y-4">
