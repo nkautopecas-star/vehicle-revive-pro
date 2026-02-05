@@ -33,7 +33,7 @@ import { cn } from "@/lib/utils";
  import type { ExtendedPartFormData } from "@/hooks/useParts";
  import { useAllPartCompatibilities, filterPartsByAdvancedCompatibility, type AdvancedCompatibilityFilter, useCreatePartCompatibility } from "@/hooks/usePartsWithCompatibilities";
 import { PartFormDialog } from "@/components/parts/PartFormDialog";
-  import { PartFormWizard, type MarketplaceConfig, type NewCompatibility } from "@/components/parts/PartFormWizard";
+   import { PartFormWizard, type MarketplaceConfig, type NewCompatibility, type MarketplaceAccountSelection } from "@/components/parts/PartFormWizard";
  import { useMercadoLivre } from "@/hooks/useMercadoLivre";
 import { DeletePartDialog } from "@/components/parts/DeletePartDialog";
 import { PartThumbnail } from "@/components/parts/PartThumbnail";
@@ -76,7 +76,7 @@ const Pecas = () => {
   const updateMutation = useUpdatePart();
   const deleteMutation = useDeletePart();
   const createCompatibilityMutation = useCreatePartCompatibility();
-   const { createListing, accounts: mlAccounts = [] } = useMercadoLivre();
+   const { createListing, isCreatingListing, accounts: mlAccounts = [] } = useMercadoLivre();
 
   // Handle edit/duplicate from URL params
   useEffect(() => {
@@ -139,7 +139,7 @@ const Pecas = () => {
   const valorEstoque = filteredParts.reduce((acc, p) => acc + (p.preco_venda || 0) * p.quantidade, 0);
   const uniqueCategories = [...new Set(parts.map((p) => p.categoria_nome).filter(Boolean))];
 
-    const handleCreatePart = async (data: ExtendedPartFormData, marketplaces: MarketplaceConfig, newCompatibilities: NewCompatibility[]) => {
+    const handleCreatePart = async (data: ExtendedPartFormData, marketplaces: MarketplaceConfig, newCompatibilities: NewCompatibility[], accountSelection: MarketplaceAccountSelection) => {
       createMutation.mutate(data, {
         onSuccess: async (partId) => {
         setIsFormDialogOpen(false);
@@ -155,7 +155,31 @@ const Pecas = () => {
               });
             }
           }
-          // TODO: If marketplaces selected, create listings
+          
+          // Create ML listing if marketplace selected
+          if (marketplaces.mercadolivre && partId) {
+            const activeAccounts = mlAccounts.filter(acc => acc.status === 'active');
+            const accountId = accountSelection.mercadolivre_account_id || 
+              (activeAccounts.length === 1 ? activeAccounts[0].id : undefined);
+            
+            if (accountId) {
+              createListing({ 
+                accountId, 
+                partId,
+                listingData: {
+                  // Pass shipping dimensions
+                  shipping: data.peso_gramas && data.comprimento_cm && data.largura_cm && data.altura_cm ? {
+                    dimensions: {
+                      height: data.altura_cm,
+                      width: data.largura_cm,
+                      length: data.comprimento_cm,
+                    },
+                    weight: data.peso_gramas,
+                  } : undefined,
+                }
+              });
+            }
+          }
       },
     });
   };
@@ -179,7 +203,7 @@ const Pecas = () => {
     setIsFormDialogOpen(true);
   };
 
-    const handleUpdatePart = async (data: ExtendedPartFormData, marketplaces: MarketplaceConfig, newCompatibilities: NewCompatibility[]) => {
+    const handleUpdatePart = async (data: ExtendedPartFormData, marketplaces: MarketplaceConfig, newCompatibilities: NewCompatibility[], accountSelection: MarketplaceAccountSelection) => {
     if (!editingPart) return;
     updateMutation.mutate({ id: editingPart.id, data }, {
        onSuccess: async () => {

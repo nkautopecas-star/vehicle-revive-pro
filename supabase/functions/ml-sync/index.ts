@@ -149,6 +149,15 @@ serve(async (req) => {
           ?.map((img: any) => ({
             source: `${SUPABASE_URL}/storage/v1/object/public/part-images/${img.file_path}`,
           })) || [],
+        // Add shipping info if dimensions are available
+        ...(part.peso_gramas && part.comprimento_cm && part.largura_cm && part.altura_cm ? {
+          shipping: {
+            mode: 'me2',
+            local_pick_up: false,
+            free_shipping: false,
+            dimensions: `${part.comprimento_cm}x${part.largura_cm}x${part.altura_cm},${part.peso_gramas}`,
+          },
+        } : {}),
         ...listing_data,
       };
 
