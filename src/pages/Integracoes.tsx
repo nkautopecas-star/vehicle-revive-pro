@@ -2,20 +2,17 @@ import { useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { 
   Link2, 
-  ExternalLink,
-  Settings,
-  CheckCircle,
-  AlertCircle,
-  Zap,
   Loader2
 } from "lucide-react";
 import { useMercadoLivre } from "@/hooks/useMercadoLivre";
+import { useOLX } from "@/hooks/useOLX";
 import { MLAccountCard } from "@/components/integrations/MLAccountCard";
 import { MLConnectCard } from "@/components/integrations/MLConnectCard";
+import { OLXAccountCard } from "@/components/integrations/OLXAccountCard";
+import { OLXConnectCard } from "@/components/integrations/OLXConnectCard";
 
 const otherIntegrations = [
   {
@@ -23,15 +20,6 @@ const otherIntegrations = [
     name: "Shopee",
     description: "Integração completa com Shopee Sellers",
     icon: "🧡",
-    connected: false,
-    accounts: 0,
-    category: "marketplace",
-  },
-  {
-    id: "olx",
-    name: "OLX",
-    description: "Publicação de anúncios na OLX",
-    icon: "📦",
     connected: false,
     accounts: 0,
     category: "marketplace",
@@ -85,22 +73,40 @@ const Integracoes = () => {
   
   const { 
     accounts: mlAccounts, 
-    isLoadingAccounts,
-    isConnecting,
-    startOAuth,
-    exchangeCode,
+    isLoadingAccounts: isLoadingMLAccounts,
+    isConnecting: isConnectingML,
+    startOAuth: startMLOAuth,
+    exchangeCode: exchangeMLCode,
     syncAll,
     isSyncing 
   } = useMercadoLivre();
 
+  const {
+    accounts: olxAccounts,
+    isLoadingAccounts: isLoadingOLXAccounts,
+    isConnecting: isConnectingOLX,
+    startOAuth: startOLXOAuth,
+    exchangeCode: exchangeOLXCode,
+  } = useOLX();
+
   // Handle OAuth callback
   useEffect(() => {
     const code = searchParams.get('code');
+    const state = searchParams.get('state');
+    
     if (code && !processingCode) {
       setProcessingCode(true);
-      exchangeCode(code)
+      
+      // Determine which marketplace based on state or URL params
+      // OLX might add a specific state or we can check for OLX-specific params
+      const isOLX = state?.includes('olx') || searchParams.get('source') === 'olx';
+      
+      const exchangePromise = isOLX 
+        ? exchangeOLXCode(code) 
+        : exchangeMLCode(code);
+      
+      exchangePromise
         .then(() => {
-          // Clear the code from URL
           setSearchParams({});
         })
         .catch(() => {
@@ -110,7 +116,7 @@ const Integracoes = () => {
           setProcessingCode(false);
         });
     }
-  }, [searchParams, exchangeCode, setSearchParams, processingCode]);
+  }, [searchParams, exchangeMLCode, exchangeOLXCode, setSearchParams, processingCode]);
 
   const categorizedIntegrations = Object.entries(categories).map(([key, value]) => ({
     ...value,
@@ -130,7 +136,7 @@ const Integracoes = () => {
             </p>
           </div>
           
-          {isLoadingAccounts ? (
+          {isLoadingMLAccounts ? (
             <div className="flex items-center justify-center py-8">
               <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
             </div>
@@ -145,8 +151,37 @@ const Integracoes = () => {
                 />
               ))}
               <MLConnectCard 
-                onConnect={startOAuth} 
-                isConnecting={isConnecting || processingCode} 
+                onConnect={startMLOAuth} 
+                isConnecting={isConnectingML || processingCode} 
+              />
+            </div>
+          )}
+        </div>
+
+        {/* OLX Section */}
+        <div>
+          <div className="mb-4">
+            <h2 className="text-lg font-semibold">OLX</h2>
+            <p className="text-sm text-muted-foreground">
+              Publique anúncios automaticamente na OLX Brasil
+            </p>
+          </div>
+          
+          {isLoadingOLXAccounts ? (
+            <div className="flex items-center justify-center py-8">
+              <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {olxAccounts?.map((account) => (
+                <OLXAccountCard
+                  key={account.id}
+                  account={account}
+                />
+              ))}
+              <OLXConnectCard 
+                onConnect={startOLXOAuth} 
+                isConnecting={isConnectingOLX || processingCode} 
               />
             </div>
           )}
@@ -236,14 +271,16 @@ const Integracoes = () => {
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="p-4 rounded-lg bg-muted/50">
-              <p className="text-sm font-medium mb-2">URL do Webhook Mercado Livre:</p>
-              <code className="text-xs bg-background px-2 py-1 rounded border">
-                {import.meta.env.VITE_SUPABASE_URL}/functions/v1/ml-webhook
-              </code>
-              <p className="text-xs text-muted-foreground mt-2">
-                Configure esta URL nas notificações da sua aplicação no Portal de Desenvolvedores do Mercado Livre
-              </p>
+            <div className="space-y-4">
+              <div className="p-4 rounded-lg bg-muted/50">
+                <p className="text-sm font-medium mb-2">URL do Webhook Mercado Livre:</p>
+                <code className="text-xs bg-background px-2 py-1 rounded border">
+                  {import.meta.env.VITE_SUPABASE_URL}/functions/v1/ml-webhook
+                </code>
+                <p className="text-xs text-muted-foreground mt-2">
+                  Configure esta URL nas notificações da sua aplicação no Portal de Desenvolvedores do Mercado Livre
+                </p>
+              </div>
             </div>
           </CardContent>
         </Card>
