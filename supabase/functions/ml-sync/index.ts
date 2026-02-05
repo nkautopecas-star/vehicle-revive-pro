@@ -583,25 +583,87 @@ serve(async (req) => {
           await new Promise(r => setTimeout(r, 100)); // rate limit delay
         }
 
-        // Upsert items into DB
+        // Upsert items into DB and auto-create parts
         if (items.length > 0) {
-          const upsertData = items.map(item => {
+          // First, check which listings already exist
+          const externalIds = items.map(item => item.id);
+          const { data: existingListings } = await supabase
+            .from('marketplace_listings')
+            .select('external_id, part_id')
+            .eq('marketplace_account_id', account_id)
+            .in('external_id', externalIds);
+          
+          const existingMap = new Map<string, { part_id: string | null }>();
+          for (const listing of existingListings || []) {
+            existingMap.set(listing.external_id, { part_id: listing.part_id });
+          }
+
+          // Get the user_id from the marketplace account
+          const { data: accountData } = await supabase
+            .from('marketplace_accounts')
+            .select('user_id')
+            .eq('id', account_id)
+            .single();
+          
+          const userId = accountData?.user_id;
+
+          const upsertData: Array<{
+            marketplace_account_id: string;
+            external_id: string;
+            titulo: string;
+            preco: number;
+            status: 'active' | 'paused' | 'sold';
+            part_id: string | null;
+            last_sync: string;
+            image_url: string | null;
+          }> = [];
+
+          for (const item of items) {
             const imageUrl = item.pictures?.[0]?.url || item.pictures?.[0]?.secure_url || item.thumbnail || null;
             let mappedStatus: 'active' | 'paused' | 'sold' = 'paused';
             if (item.status === 'active') mappedStatus = 'active';
             else if (item.status === 'closed') mappedStatus = 'sold';
 
-            return {
+            const existing = existingMap.get(item.id);
+            let partId = existing?.part_id || null;
+
+            // Auto-create part if this is a new listing and user exists
+            if (!existing && userId) {
+              const partStatus = mappedStatus === 'sold' ? 'vendida' : 'ativa';
+              
+              const { data: newPart, error: partError } = await supabase
+                .from('parts')
+                .insert({
+                  nome: (item.title || 'Sem título').substring(0, 255),
+                  preco_venda: item.price || 0,
+                  condicao: 'usada',
+                  quantidade: 1,
+                  quantidade_minima: 0,
+                  status: partStatus,
+                  user_id: userId,
+                })
+                .select('id')
+                .single();
+
+              if (!partError && newPart) {
+                partId = newPart.id;
+                console.log(`Auto-created part ${newPart.id} for listing ${item.id}`);
+              } else {
+                console.error(`Failed to auto-create part for listing ${item.id}:`, partError);
+              }
+            }
+
+            upsertData.push({
               marketplace_account_id: account_id,
               external_id: item.id,
               titulo: (item.title || 'Sem título').substring(0, 255),
               preco: item.price || 0,
               status: mappedStatus,
-              part_id: null,
+              part_id: partId,
               last_sync: new Date().toISOString(),
               image_url: imageUrl,
-            };
-          });
+            });
+          }
 
           const { error: upsertError } = await supabase
             .from('marketplace_listings')

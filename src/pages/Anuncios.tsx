@@ -39,7 +39,6 @@ import {
   ShoppingBag,
   Link2,
   ImageIcon,
-  Download,
 } from "lucide-react";
 import { AspectRatio } from "@/components/ui/aspect-ratio";
 import {
@@ -50,7 +49,6 @@ import {
   MarketplaceListing,
 } from "@/hooks/useMarketplaceListings";
 import { LinkPartDialog } from "@/components/anuncios/LinkPartDialog";
-import { ImportListingsDialog } from "@/components/anuncios/ImportListingsDialog";
 import { AnunciosPagination } from "@/components/anuncios/AnunciosPagination";
 import { formatDistanceToNow } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -61,7 +59,6 @@ export default function Anuncios() {
   const [statusFilter, setStatusFilter] = useState("all");
   const [accountFilter, setAccountFilter] = useState("all");
   const [linkDialogOpen, setLinkDialogOpen] = useState(false);
-  const [importDialogOpen, setImportDialogOpen] = useState(false);
   const [selectedListing, setSelectedListing] = useState<MarketplaceListing | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(20);
@@ -141,24 +138,14 @@ export default function Anuncios() {
               Gerencie seus anúncios importados do Mercado Livre
             </p>
           </div>
-          <div className="flex gap-2">
-            <Button
-              variant="outline"
-              onClick={() => setImportDialogOpen(true)}
-              disabled={!listings.length}
-            >
-              <Download className="w-4 h-4 mr-2" />
-              Importar como Peças
-            </Button>
-            <Button
-              variant="outline"
-              onClick={() => refetch()}
-              disabled={isFetching}
-            >
-              <RefreshCw className={`w-4 h-4 mr-2 ${isFetching ? "animate-spin" : ""}`} />
-              Atualizar
-            </Button>
-          </div>
+          <Button
+            variant="outline"
+            onClick={() => refetch()}
+            disabled={isFetching}
+          >
+            <RefreshCw className={`w-4 h-4 mr-2 ${isFetching ? "animate-spin" : ""}`} />
+            Atualizar
+          </Button>
         </div>
 
         {/* Stats Cards */}
@@ -445,13 +432,6 @@ export default function Anuncios() {
             isLinking={linkMutation.isPending}
           />
         )}
-
-        {/* Import Listings Dialog */}
-        <ImportListingsDialog
-          open={importDialogOpen}
-          onOpenChange={setImportDialogOpen}
-          listings={listings}
-        />
       </div>
     </AppLayout>
   );
