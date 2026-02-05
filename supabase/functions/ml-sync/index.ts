@@ -627,8 +627,8 @@ serve(async (req) => {
             const existing = existingMap.get(item.id);
             let partId = existing?.part_id || null;
 
-            // Auto-create part if this is a new listing and user exists
-            if (!existing && userId) {
+            // Auto-create part if listing has no part_id and user exists
+            if (!partId && userId) {
               const partStatus = mappedStatus === 'sold' ? 'vendida' : 'ativa';
               
               const { data: newPart, error: partError } = await supabase
