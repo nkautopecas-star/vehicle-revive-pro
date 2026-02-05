@@ -21,9 +21,10 @@ import type { Part } from "@/hooks/useParts";
 import { PartImageUpload } from "../PartImageUpload";
 import { PartCompatibilities } from "../PartCompatibilities";
 import { WizardImageUpload, type PendingImage } from "../WizardImageUpload";
-import { useSuggestPartInfo, type PartSuggestion } from "@/hooks/useSuggestPartInfo";
+import { useSuggestPartInfo, type PartSuggestion, type CompatibilitySuggestion } from "@/hooks/useSuggestPartInfo";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
+import { Checkbox } from "@/components/ui/checkbox";
  
  interface Category {
    id: string;
@@ -48,6 +49,7 @@ interface PartBasicInfoStepProps {
   part?: Part | null;
   pendingImages: PendingImage[];
   onPendingImagesChange: (images: PendingImage[]) => void;
+  onCompatibilitySuggestions?: (suggestions: CompatibilitySuggestion[]) => void;
 }
  
 export function PartBasicInfoStep({
@@ -63,8 +65,10 @@ export function PartBasicInfoStep({
   part,
   pendingImages,
   onPendingImagesChange,
+  onCompatibilitySuggestions,
 }: PartBasicInfoStepProps) {
   const [showSuggestion, setShowSuggestion] = useState(false);
+  const [selectedCompatibilities, setSelectedCompatibilities] = useState<Set<number>>(new Set());
   const { isLoading: isSuggesting, suggestion, suggestFromOEM, clearSuggestion } = useSuggestPartInfo();
 
   const dialogTitle = isDuplicating
@@ -98,21 +102,48 @@ export function PartBasicInfoStep({
   }, [formData.codigo_oem, formData.nome, suggestFromOEM, vehicleInfo, categoryName]);
 
   // Apply suggestion
-  const applySuggestion = useCallback((s: PartSuggestion) => {
+  const applySuggestion = useCallback((s: PartSuggestion, selectedCompats?: CompatibilitySuggestion[]) => {
     setFormData({
       ...formData,
       nome: s.nome,
       preco_venda: s.precoSugerido,
       preco_custo: s.precoMinimo ? Math.round(s.precoMinimo * 0.6) : undefined,
     });
+    
+    // Pass selected compatibilities to parent
+    if (selectedCompats && selectedCompats.length > 0 && onCompatibilitySuggestions) {
+      onCompatibilitySuggestions(selectedCompats);
+    }
+    
     setShowSuggestion(false);
+    setSelectedCompatibilities(new Set());
     clearSuggestion();
-  }, [formData, setFormData, clearSuggestion]);
+  }, [formData, setFormData, clearSuggestion, onCompatibilitySuggestions]);
 
   const dismissSuggestion = useCallback(() => {
     setShowSuggestion(false);
+    setSelectedCompatibilities(new Set());
     clearSuggestion();
   }, [clearSuggestion]);
+
+  const toggleCompatibility = useCallback((index: number) => {
+    setSelectedCompatibilities(prev => {
+      const next = new Set(prev);
+      if (next.has(index)) {
+        next.delete(index);
+      } else {
+        next.add(index);
+      }
+      return next;
+    });
+  }, []);
+
+  const formatYearRange = (inicio?: number, fim?: number) => {
+    if (inicio && fim) return `${inicio} - ${fim}`;
+    if (inicio) return `${inicio}+`;
+    if (fim) return `até ${fim}`;
+    return null;
+  };
 
   const getConfiancaColor = (confianca: string) => {
     switch (confianca) {
@@ -173,69 +204,137 @@ export function PartBasicInfoStep({
            </div>
          </div>
 
-         {/* AI Suggestion Card */}
-         {showSuggestion && suggestion && (
-           <div className="p-4 rounded-lg border border-primary/30 bg-primary/5 space-y-3">
-             <div className="flex items-center justify-between">
-               <div className="flex items-center gap-2">
-                 <Sparkles className="w-4 h-4 text-primary" />
-                 <span className="text-sm font-medium">Sugestão da IA</span>
-                 <Badge className={cn("text-xs", getConfiancaColor(suggestion.confianca))}>
-                   Confiança {suggestion.confianca}
-                 </Badge>
-               </div>
-               <div className="flex gap-1">
-                 <Button
-                   type="button"
-                   size="sm"
-                   variant="ghost"
-                   className="h-7 px-2"
-                   onClick={dismissSuggestion}
-                 >
-                   <X className="w-4 h-4" />
-                 </Button>
-               </div>
-             </div>
-             
-             <div className="grid grid-cols-2 gap-4 text-sm">
-               <div>
-                 <span className="text-muted-foreground">Nome sugerido:</span>
-                 <p className="font-medium">{suggestion.nome}</p>
-               </div>
-               <div>
-                 <span className="text-muted-foreground">Título ML:</span>
-                 <p className="font-medium text-xs">{suggestion.tituloML}</p>
-               </div>
-               <div>
-                 <span className="text-muted-foreground">Preço sugerido:</span>
-                 <p className="font-medium text-primary">
-                   R$ {suggestion.precoSugerido?.toFixed(2)}
-                   {suggestion.precoMinimo && suggestion.precoMaximo && (
-                     <span className="text-xs text-muted-foreground ml-1">
-                       (R$ {suggestion.precoMinimo} - R$ {suggestion.precoMaximo})
-                     </span>
-                   )}
-                 </p>
-               </div>
-               {suggestion.descricao && (
-                 <div className="col-span-2">
-                   <span className="text-muted-foreground">Descrição:</span>
-                   <p className="text-xs">{suggestion.descricao}</p>
-                 </div>
-               )}
-             </div>
+          {/* AI Suggestion Card */}
+          {showSuggestion && suggestion && (
+            <div className="p-4 rounded-lg border border-primary/30 bg-primary/5 space-y-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Sparkles className="w-4 h-4 text-primary" />
+                  <span className="text-sm font-medium">Sugestão da IA</span>
+                  <Badge className={cn("text-xs", getConfiancaColor(suggestion.confianca))}>
+                    Confiança {suggestion.confianca}
+                  </Badge>
+                </div>
+                <div className="flex gap-1">
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="ghost"
+                    className="h-7 px-2"
+                    onClick={dismissSuggestion}
+                  >
+                    <X className="w-4 h-4" />
+                  </Button>
+                </div>
+              </div>
+              
+              <div className="grid grid-cols-2 gap-4 text-sm">
+                <div>
+                  <span className="text-muted-foreground">Nome sugerido:</span>
+                  <p className="font-medium">{suggestion.nome}</p>
+                </div>
+                <div>
+                  <span className="text-muted-foreground">Título ML:</span>
+                  <p className="font-medium text-xs">{suggestion.tituloML}</p>
+                </div>
+                <div>
+                  <span className="text-muted-foreground">Preço sugerido:</span>
+                  <p className="font-medium text-primary">
+                    R$ {suggestion.precoSugerido?.toFixed(2)}
+                    {suggestion.precoMinimo && suggestion.precoMaximo && (
+                      <span className="text-xs text-muted-foreground ml-1">
+                        (R$ {suggestion.precoMinimo} - R$ {suggestion.precoMaximo})
+                      </span>
+                    )}
+                  </p>
+                </div>
+                {suggestion.descricao && (
+                  <div className="col-span-2">
+                    <span className="text-muted-foreground">Descrição:</span>
+                    <p className="text-xs">{suggestion.descricao}</p>
+                  </div>
+                )}
+              </div>
 
-             <Button
-               type="button"
-               size="sm"
-               onClick={() => applySuggestion(suggestion)}
-               className="w-full gap-2"
-             >
-               <Check className="w-4 h-4" />
-               Aplicar Sugestão
-             </Button>
-           </div>
-         )}
+              {/* Compatibility Suggestions */}
+              {suggestion.compatibilidades && suggestion.compatibilidades.length > 0 && (
+                <div className="space-y-2 pt-2 border-t border-primary/20">
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm text-muted-foreground">Compatibilidades sugeridas:</span>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="h-6 text-xs"
+                      onClick={() => {
+                        if (selectedCompatibilities.size === suggestion.compatibilidades!.length) {
+                          setSelectedCompatibilities(new Set());
+                        } else {
+                          setSelectedCompatibilities(new Set(suggestion.compatibilidades!.map((_, i) => i)));
+                        }
+                      }}
+                    >
+                      {selectedCompatibilities.size === suggestion.compatibilidades.length
+                        ? "Desmarcar todas"
+                        : "Selecionar todas"}
+                    </Button>
+                  </div>
+                  <div className="space-y-1 max-h-32 overflow-y-auto">
+                    {suggestion.compatibilidades.map((compat, index) => (
+                      <div
+                        key={index}
+                        className={cn(
+                          "flex items-center gap-2 rounded px-2 py-1 cursor-pointer transition-colors text-sm",
+                          selectedCompatibilities.has(index)
+                            ? "bg-primary/20"
+                            : "hover:bg-muted/50"
+                        )}
+                        onClick={() => toggleCompatibility(index)}
+                      >
+                        <Checkbox
+                          checked={selectedCompatibilities.has(index)}
+                          onCheckedChange={() => toggleCompatibility(index)}
+                          onClick={(e) => e.stopPropagation()}
+                        />
+                        <span className="font-medium">
+                          {compat.marca} {compat.modelo}
+                        </span>
+                        {formatYearRange(compat.ano_inicio, compat.ano_fim) && (
+                          <Badge variant="secondary" className="text-xs">
+                            {formatYearRange(compat.ano_inicio, compat.ano_fim)}
+                          </Badge>
+                        )}
+                        {compat.observacoes && (
+                          <span className="text-xs text-muted-foreground truncate">
+                            ({compat.observacoes})
+                          </span>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              <Button
+                type="button"
+                size="sm"
+                onClick={() => {
+                  const selectedCompats = suggestion.compatibilidades
+                    ?.filter((_, i) => selectedCompatibilities.has(i)) || [];
+                  applySuggestion(suggestion, selectedCompats);
+                }}
+                className="w-full gap-2"
+              >
+                <Check className="w-4 h-4" />
+                Aplicar Sugestão
+                {selectedCompatibilities.size > 0 && (
+                  <span className="text-xs opacity-80">
+                    (+{selectedCompatibilities.size} compatibilidade{selectedCompatibilities.size > 1 ? 's' : ''})
+                  </span>
+                )}
+              </Button>
+            </div>
+          )}
 
          {/* Name and Category */}
          <div className="grid grid-cols-2 gap-4">

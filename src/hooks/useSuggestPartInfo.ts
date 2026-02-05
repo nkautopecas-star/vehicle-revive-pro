@@ -2,6 +2,14 @@ import { useState, useCallback, useRef } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 
+export interface CompatibilitySuggestion {
+  marca: string;
+  modelo: string;
+  ano_inicio?: number;
+  ano_fim?: number;
+  observacoes?: string;
+}
+
 export interface PartSuggestion {
   nome: string;
   tituloML: string;
@@ -10,6 +18,7 @@ export interface PartSuggestion {
   precoSugerido: number;
   confianca: "alta" | "media" | "baixa";
   descricao?: string;
+  compatibilidades?: CompatibilitySuggestion[];
 }
 
 // Cache global para sugestões de OEM

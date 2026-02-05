@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import {
   Dialog,
   DialogContent,
@@ -9,6 +9,7 @@ import { PartMarketplaceStep } from "./wizard/PartMarketplaceStep";
 import { Progress } from "@/components/ui/progress";
 import type { CompatibilityEntry } from "./wizard/CompatibilityInlineForm";
 import type { PendingImage } from "./WizardImageUpload";
+import type { CompatibilitySuggestion } from "@/hooks/useSuggestPartInfo";
 
 export interface MarketplaceConfig {
   mercadolivre: boolean;
@@ -215,6 +216,17 @@ interface PartFormWizardProps {
               part={part}
               pendingImages={pendingImages}
               onPendingImagesChange={setPendingImages}
+              onCompatibilitySuggestions={(suggestions: CompatibilitySuggestion[]) => {
+                // Convert CompatibilitySuggestion to CompatibilityEntry format
+                const newEntries: CompatibilityEntry[] = suggestions.map((s, index) => ({
+                  id: `ai-${Date.now()}-${index}`,
+                  marca: s.marca,
+                  modelo: s.modelo,
+                  ano_inicio: s.ano_inicio || null,
+                  ano_fim: s.ano_fim || null,
+                }));
+                setNewCompatibilities(prev => [...prev, ...newEntries]);
+              }}
             />
           )}
  

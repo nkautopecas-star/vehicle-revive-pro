@@ -32,19 +32,22 @@ Sua tarefa é identificar uma peça a partir do código OEM e fornecer:
 1. Nome comercial da peça (como seria chamada no Mercado Livre)
 2. Título otimizado para anúncio no Mercado Livre (máximo 60 caracteres)
 3. Faixa de preço estimada para peça usada em bom estado
+4. Lista de veículos compatíveis com essa peça (máximo 5)
 
 Regras:
 - Baseie-se em dados reais do mercado brasileiro
 - Seja preciso no nome da peça
 - O título para ML deve ser vendedor, incluir a marca se possível
 - A faixa de preço deve ser realista para peças usadas
+- Para compatibilidades, foque em veículos do mercado brasileiro
+- Inclua faixas de anos quando aplicável para as compatibilidades
 - Se não conseguir identificar a peça, indique isso`;
 
     const userPrompt = `Código OEM: ${codigoOEM}
 ${vehicleInfo ? `Veículo de origem: ${vehicleInfo}` : ""}
 ${categoryName ? `Categoria: ${categoryName}` : ""}
 
-Identifique a peça e forneça nome, título otimizado para ML e faixa de preço.`;
+Identifique a peça e forneça nome, título otimizado para ML, faixa de preço e veículos compatíveis.`;
 
     const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
@@ -95,6 +98,22 @@ Identifique a peça e forneça nome, título otimizado para ML e faixa de preço
                   descricao: {
                     type: "string",
                     description: "Breve descrição da peça identificada"
+                  },
+                  compatibilidades: {
+                    type: "array",
+                    description: "Lista de veículos compatíveis com a peça",
+                    items: {
+                      type: "object",
+                      properties: {
+                        marca: { type: "string", description: "Marca do veículo (ex: Honda, Toyota)" },
+                        modelo: { type: "string", description: "Modelo do veículo (ex: Civic, Corolla)" },
+                        ano_inicio: { type: "number", description: "Ano inicial da compatibilidade" },
+                        ano_fim: { type: "number", description: "Ano final da compatibilidade" },
+                        observacoes: { type: "string", description: "Observações sobre a compatibilidade" }
+                      },
+                      required: ["marca", "modelo"],
+                      additionalProperties: false
+                    }
                   }
                 },
                 required: ["nome", "tituloML", "precoSugerido", "confianca"],
