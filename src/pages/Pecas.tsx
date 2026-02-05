@@ -684,9 +684,9 @@ const Pecas = () => {
                         />
                       </TableCell>
                       <TableCell>
-                        <Link to={`/pecas/${part.id}`} className="flex items-center gap-3 hover:opacity-80 transition-opacity">
+                        <div className="flex items-center gap-3">
                           <PartThumbnailWithGallery partId={part.id} partName={part.nome} />
-                          <div>
+                          <Link to={`/pecas/${part.id}`} className="hover:opacity-80 transition-opacity">
                             <div className="flex items-center gap-2">
                               <p className="font-medium hover:text-primary transition-colors">{part.nome}</p>
                               {mlStatusMap.get(part.id) && (
@@ -694,8 +694,8 @@ const Pecas = () => {
                               )}
                             </div>
                             <p className="text-xs text-muted-foreground">{part.categoria_nome || "Sem categoria"}</p>
-                          </div>
-                        </Link>
+                          </Link>
+                        </div>
                       </TableCell>
                       <TableCell>
                         <div className="font-mono text-xs">
