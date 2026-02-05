@@ -7,6 +7,22 @@
  import { Plus, X, Car, Sparkles, Loader2, Check } from "lucide-react";
  import { supabase } from "@/integrations/supabase/client";
  import { toast } from "sonner";
+import { useCompatibilitySuggestions } from "@/hooks/useCompatibilitySuggestions";
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from "@/components/ui/command";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import { cn } from "@/lib/utils";
+import { ChevronsUpDown } from "lucide-react";
  
  export interface CompatibilityEntry {
    id: string;
@@ -53,6 +69,15 @@
    const [suggestions, setSuggestions] = useState<AISuggestion[]>([]);
    const [showSuggestions, setShowSuggestions] = useState(false);
  
+  const [openMarca, setOpenMarca] = useState(false);
+  const [openModelo, setOpenModelo] = useState(false);
+
+  const { data: autocompleteData } = useCompatibilitySuggestions();
+  const marcaOptions = autocompleteData?.marcas || [];
+  const modeloOptions = marca && autocompleteData?.modelos[marca] 
+    ? autocompleteData.modelos[marca] 
+    : autocompleteData?.allModelos || [];
+
    const handleAdd = () => {
      if (!marca.trim() || !modelo.trim()) return;
      
@@ -276,21 +301,101 @@
              <div className="grid grid-cols-2 gap-4">
                <div className="space-y-2">
                  <Label htmlFor="marca">Marca *</Label>
-                 <Input
-                   id="marca"
-                   placeholder="Ex: Volkswagen"
-                   value={marca}
-                   onChange={(e) => setMarca(e.target.value)}
-                 />
+                  <Popover open={openMarca} onOpenChange={setOpenMarca}>
+                    <PopoverTrigger asChild>
+                      <Button
+                        variant="outline"
+                        role="combobox"
+                        aria-expanded={openMarca}
+                        className="w-full justify-between font-normal"
+                      >
+                        {marca || "Selecione ou digite..."}
+                        <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-[200px] p-0 z-50" align="start">
+                      <Command>
+                        <CommandInput 
+                          placeholder="Buscar marca..." 
+                          value={marca}
+                          onValueChange={setMarca}
+                        />
+                        <CommandList>
+                          <CommandEmpty>
+                            <span className="text-sm text-muted-foreground">
+                              Usar "{marca}"
+                            </span>
+                          </CommandEmpty>
+                          <CommandGroup>
+                            {marcaOptions
+                              .filter(m => m.toLowerCase().includes(marca.toLowerCase()))
+                              .slice(0, 10)
+                              .map((m) => (
+                                <CommandItem
+                                  key={m}
+                                  value={m}
+                                  onSelect={(value) => {
+                                    setMarca(value);
+                                    setOpenMarca(false);
+                                  }}
+                                >
+                                  {m}
+                                </CommandItem>
+                              ))}
+                          </CommandGroup>
+                        </CommandList>
+                      </Command>
+                    </PopoverContent>
+                  </Popover>
                </div>
                <div className="space-y-2">
                  <Label htmlFor="modelo">Modelo *</Label>
-                 <Input
-                   id="modelo"
-                   placeholder="Ex: Gol"
-                   value={modelo}
-                   onChange={(e) => setModelo(e.target.value)}
-                 />
+                  <Popover open={openModelo} onOpenChange={setOpenModelo}>
+                    <PopoverTrigger asChild>
+                      <Button
+                        variant="outline"
+                        role="combobox"
+                        aria-expanded={openModelo}
+                        className="w-full justify-between font-normal"
+                      >
+                        {modelo || "Selecione ou digite..."}
+                        <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-[200px] p-0 z-50" align="start">
+                      <Command>
+                        <CommandInput 
+                          placeholder="Buscar modelo..." 
+                          value={modelo}
+                          onValueChange={setModelo}
+                        />
+                        <CommandList>
+                          <CommandEmpty>
+                            <span className="text-sm text-muted-foreground">
+                              Usar "{modelo}"
+                            </span>
+                          </CommandEmpty>
+                          <CommandGroup>
+                            {modeloOptions
+                              .filter(m => m.toLowerCase().includes(modelo.toLowerCase()))
+                              .slice(0, 10)
+                              .map((m) => (
+                                <CommandItem
+                                  key={m}
+                                  value={m}
+                                  onSelect={(value) => {
+                                    setModelo(value);
+                                    setOpenModelo(false);
+                                  }}
+                                >
+                                  {m}
+                                </CommandItem>
+                              ))}
+                          </CommandGroup>
+                        </CommandList>
+                      </Command>
+                    </PopoverContent>
+                  </Popover>
                </div>
              </div>
              <div className="grid grid-cols-2 gap-4">
