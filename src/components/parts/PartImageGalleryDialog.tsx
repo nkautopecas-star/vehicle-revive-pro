@@ -6,6 +6,7 @@ import { ChevronLeft, ChevronRight, ZoomIn, ZoomOut, RotateCcw, ExternalLink } f
 import { usePartImagesWithFallback } from "@/hooks/usePartImagesWithFallback";
 import { cn } from "@/lib/utils";
 import { usePinchZoom } from "@/hooks/usePinchZoom";
+import { useIsMobile } from "@/hooks/use-mobile";
 
 interface PartImageGalleryDialogProps {
   open: boolean;
@@ -24,11 +25,15 @@ export function PartImageGalleryDialog({
   const [currentIndex, setCurrentIndex] = useState(0);
   const [scale, setScale] = useState(1);
   const [position, setPosition] = useState({ x: 0, y: 0 });
+  const isMobile = useIsMobile();
+  
+  const pinchZoom = usePinchZoom(1, 4);
 
   const resetZoom = useCallback(() => {
     setScale(1);
     setPosition({ x: 0, y: 0 });
-  }, []);
+    pinchZoom.reset();
+  }, [pinchZoom]);
 
   const handlePrevious = () => {
     resetZoom();
@@ -112,6 +117,9 @@ export function PartImageGalleryDialog({
         <div 
           className="flex-1 relative overflow-hidden bg-black/5 dark:bg-white/5"
           onWheel={handleWheel}
+          onTouchStart={pinchZoom.handleTouchStart}
+          onTouchMove={pinchZoom.handleTouchMove}
+          onTouchEnd={pinchZoom.handleTouchEnd}
         >
           {isLoading ? (
             <div className="w-full h-full flex items-center justify-center">
@@ -126,17 +134,23 @@ export function PartImageGalleryDialog({
               <div 
                 className={cn(
                   "w-full h-full flex items-center justify-center",
-                  scale > 1 ? "cursor-grab active:cursor-grabbing" : ""
+                  (scale > 1 || pinchZoom.isZoomed) ? "cursor-grab active:cursor-grabbing" : ""
                 )}
                 onMouseDown={handleMouseDown}
+                onDoubleClick={isMobile ? pinchZoom.toggleZoom : undefined}
               >
                 <img
                   src={currentImage?.url}
                   alt={`${partName} - Imagem ${currentIndex + 1}`}
-                  className="max-w-full max-h-full object-contain select-none"
+                  className="max-w-full max-h-full object-contain select-none touch-none"
                   style={{
-                    transform: `scale(${scale}) translate(${position.x / scale}px, ${position.y / scale}px)`,
-                    transition: scale === 1 ? "transform 0.2s ease-out" : "none",
+                    transform: isMobile && pinchZoom.isZoomed
+                      ? `scale(${pinchZoom.scale})`
+                      : `scale(${scale}) translate(${position.x / scale}px, ${position.y / scale}px)`,
+                    transformOrigin: isMobile && pinchZoom.isZoomed
+                      ? `${pinchZoom.position.x}% ${pinchZoom.position.y}%`
+                      : 'center center',
+                    transition: (scale === 1 && !pinchZoom.isZoomed) ? "transform 0.2s ease-out" : "none",
                   }}
                   draggable={false}
                 />
