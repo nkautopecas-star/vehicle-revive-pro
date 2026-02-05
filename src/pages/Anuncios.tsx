@@ -2,7 +2,6 @@ import { useState } from "react";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import {
   Select,
   SelectContent,
@@ -13,7 +12,6 @@ import {
 import {
   Table,
   TableBody,
-  TableCell,
   TableHead,
   TableHeader,
   TableRow,
@@ -21,38 +19,22 @@ import {
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
-import {
-  HoverCard,
-  HoverCardContent,
-  HoverCardTrigger,
-} from "@/components/ui/hover-card";
-import {
   Search,
-  ExternalLink,
   Package,
   Filter,
   RefreshCw,
   ShoppingBag,
-  Link2,
-  ImageIcon,
 } from "lucide-react";
-import { AspectRatio } from "@/components/ui/aspect-ratio";
 import {
-  useMarketplaceListings,
   useMarketplaceAccounts,
   useLinkListingToPart,
   useMarketplaceListingStats,
   MarketplaceListing,
 } from "@/hooks/useMarketplaceListings";
+import { useGroupedListings } from "@/hooks/useGroupedListings";
 import { LinkPartDialog } from "@/components/anuncios/LinkPartDialog";
 import { AnunciosPagination } from "@/components/anuncios/AnunciosPagination";
-import { formatDistanceToNow } from "date-fns";
-import { ptBR } from "date-fns/locale";
-import { Link } from "react-router-dom";
+import { GroupedListingRow } from "@/components/anuncios/GroupedListingRow";
 
 export default function Anuncios() {
   const [search, setSearch] = useState("");
@@ -65,8 +47,8 @@ export default function Anuncios() {
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(20);
 
-  const { data: accounts, isLoading: accountsLoading } = useMarketplaceAccounts();
-  const { data: paginatedResult, isLoading, refetch, isFetching } = useMarketplaceListings({
+  const { data: accounts } = useMarketplaceAccounts();
+  const { data: groupedResult, isLoading, refetch, isFetching } = useGroupedListings({
     accountId: accountFilter !== "all" ? accountFilter : undefined,
     status: statusFilter,
     search: search.length >= 2 ? search : undefined,
@@ -80,7 +62,7 @@ export default function Anuncios() {
   );
   const linkMutation = useLinkListingToPart();
 
-  const listings = paginatedResult?.data || [];
+  const groups = groupedResult?.data || [];
 
   const handleOpenLinkDialog = (listing: MarketplaceListing) => {
     setSelectedListing(listing);
@@ -93,7 +75,7 @@ export default function Anuncios() {
 
   const handlePageSizeChange = (size: number) => {
     setPageSize(size);
-    setCurrentPage(1); // Reset to first page when changing page size
+    setCurrentPage(1);
   };
 
   const handleLinkPart = (partId: string | null) => {
@@ -107,21 +89,6 @@ export default function Anuncios() {
         },
       }
     );
-  };
-
-  const getStatusBadge = (status: string) => {
-    switch (status) {
-      case "active":
-        return <Badge className="bg-success/20 text-success border-0">Ativo</Badge>;
-      case "paused":
-        return <Badge variant="secondary">Pausado</Badge>;
-      case "sold":
-        return <Badge className="bg-primary/20 text-primary border-0">Vendido</Badge>;
-      case "deleted":
-        return <Badge variant="destructive">Excluído</Badge>;
-      default:
-        return <Badge variant="outline">{status}</Badge>;
-    }
   };
 
   const formatPrice = (price: number) => {
@@ -274,6 +241,7 @@ export default function Anuncios() {
             <Table>
               <TableHeader>
                 <TableRow>
+                  <TableHead className="w-8"></TableHead>
                   <TableHead className="w-[60px]">Foto</TableHead>
                   <TableHead className="w-[350px]">Título</TableHead>
                   <TableHead>Preço</TableHead>
@@ -287,18 +255,19 @@ export default function Anuncios() {
                 {isLoading ? (
                   Array.from({ length: pageSize }).map((_, i) => (
                     <TableRow key={i}>
-                      <TableCell><Skeleton className="h-10 w-10 rounded" /></TableCell>
-                      <TableCell><Skeleton className="h-4 w-[250px]" /></TableCell>
-                      <TableCell><Skeleton className="h-4 w-[80px]" /></TableCell>
-                      <TableCell><Skeleton className="h-4 w-[60px]" /></TableCell>
-                      <TableCell><Skeleton className="h-4 w-[120px]" /></TableCell>
-                      <TableCell><Skeleton className="h-4 w-[80px]" /></TableCell>
-                      <TableCell><Skeleton className="h-4 w-[40px]" /></TableCell>
+                      <td className="p-2"><Skeleton className="h-4 w-4" /></td>
+                      <td className="p-2"><Skeleton className="h-10 w-10 rounded" /></td>
+                      <td className="p-2"><Skeleton className="h-4 w-[250px]" /></td>
+                      <td className="p-2"><Skeleton className="h-4 w-[80px]" /></td>
+                      <td className="p-2"><Skeleton className="h-4 w-[60px]" /></td>
+                      <td className="p-2"><Skeleton className="h-4 w-[120px]" /></td>
+                      <td className="p-2"><Skeleton className="h-4 w-[80px]" /></td>
+                      <td className="p-2"><Skeleton className="h-4 w-[40px]" /></td>
                     </TableRow>
                   ))
-                ) : listings.length === 0 ? (
+                ) : groups.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={7} className="h-24 text-center">
+                    <td colSpan={8} className="h-24 text-center">
                       <div className="flex flex-col items-center gap-2 text-muted-foreground">
                         <ShoppingBag className="h-8 w-8" />
                         <p>Nenhum anúncio encontrado</p>
@@ -306,125 +275,16 @@ export default function Anuncios() {
                           Sincronize seus anúncios na página de Integrações
                         </p>
                       </div>
-                    </TableCell>
+                    </td>
                   </TableRow>
                 ) : (
-                  listings.map((listing) => (
-                    <TableRow key={listing.id}>
-                      <TableCell>
-                        {listing.image_url ? (
-                          <HoverCard openDelay={200} closeDelay={100}>
-                            <HoverCardTrigger asChild>
-                              <div className="w-10 h-10 rounded overflow-hidden bg-muted flex items-center justify-center cursor-pointer">
-                                <AspectRatio ratio={1}>
-                                  <img
-                                    src={listing.image_url}
-                                    alt={listing.titulo}
-                                    className="w-full h-full object-cover"
-                                  />
-                                </AspectRatio>
-                              </div>
-                            </HoverCardTrigger>
-                            <HoverCardContent side="right" className="w-64 p-2">
-                              <AspectRatio ratio={1}>
-                                <img
-                                  src={listing.image_url}
-                                  alt={listing.titulo}
-                                  className="w-full h-full object-cover rounded"
-                                />
-                              </AspectRatio>
-                            </HoverCardContent>
-                          </HoverCard>
-                        ) : (
-                          <div className="w-10 h-10 rounded overflow-hidden bg-muted flex items-center justify-center">
-                            <ImageIcon className="h-4 w-4 text-muted-foreground" />
-                          </div>
-                        )}
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex flex-col">
-                          <span className="font-medium line-clamp-1">
-                            {listing.titulo}
-                          </span>
-                          <span className="text-xs text-muted-foreground">
-                            {listing.external_id}
-                          </span>
-                        </div>
-                      </TableCell>
-                      <TableCell className="font-medium">
-                        {formatPrice(listing.preco)}
-                      </TableCell>
-                      <TableCell>{getStatusBadge(listing.status)}</TableCell>
-                      <TableCell>
-                        {listing.part ? (
-                          <Link
-                            to={`/pecas/${listing.part.id}`}
-                            className="text-primary hover:underline flex items-center gap-1"
-                          >
-                            <Package className="h-3 w-3" />
-                            {listing.part.codigo_interno || listing.part.nome}
-                          </Link>
-                        ) : (
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => handleOpenLinkDialog(listing)}
-                            className="text-muted-foreground hover:text-primary h-auto py-1 px-2"
-                          >
-                            <Link2 className="h-3 w-3 mr-1" />
-                            Vincular peça
-                          </Button>
-                        )}
-                      </TableCell>
-                      <TableCell className="text-sm text-muted-foreground">
-                        {listing.last_sync
-                          ? formatDistanceToNow(new Date(listing.last_sync), {
-                              addSuffix: true,
-                              locale: ptBR,
-                            })
-                          : "-"}
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <div className="flex items-center justify-end gap-1">
-                          <Tooltip>
-                            <TooltipTrigger asChild>
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                className="h-8 w-8"
-                                onClick={() => handleOpenLinkDialog(listing)}
-                              >
-                                <Link2 className="h-4 w-4" />
-                              </Button>
-                            </TooltipTrigger>
-                            <TooltipContent>
-                              {listing.part ? "Alterar vínculo" : "Vincular peça"}
-                            </TooltipContent>
-                          </Tooltip>
-                          {listing.external_id && (
-                            <Tooltip>
-                              <TooltipTrigger asChild>
-                                <Button
-                                  variant="ghost"
-                                  size="icon"
-                                  asChild
-                                  className="h-8 w-8"
-                                >
-                                  <a
-                                    href={`https://www.mercadolivre.com.br/p/${listing.external_id}`}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                  >
-                                    <ExternalLink className="h-4 w-4" />
-                                  </a>
-                                </Button>
-                              </TooltipTrigger>
-                              <TooltipContent>Abrir no Mercado Livre</TooltipContent>
-                            </Tooltip>
-                          )}
-                        </div>
-                      </TableCell>
-                    </TableRow>
+                  groups.map((group) => (
+                    <GroupedListingRow
+                      key={group.groupKey}
+                      group={group}
+                      onOpenLinkDialog={handleOpenLinkDialog}
+                      formatPrice={formatPrice}
+                    />
                   ))
                 )}
               </TableBody>
@@ -433,11 +293,11 @@ export default function Anuncios() {
         </Card>
 
         {/* Pagination */}
-        {paginatedResult && paginatedResult.totalCount > 0 && (
+        {groupedResult && groupedResult.totalCount > 0 && (
           <AnunciosPagination
             currentPage={currentPage}
-            totalPages={paginatedResult.totalPages}
-            totalCount={paginatedResult.totalCount}
+            totalPages={groupedResult.totalPages}
+            totalCount={groupedResult.totalCount}
             pageSize={pageSize}
             onPageChange={handlePageChange}
             onPageSizeChange={handlePageSizeChange}
