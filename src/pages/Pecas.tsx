@@ -36,6 +36,7 @@ import { useAllPartCompatibilities, filterPartsByAdvancedCompatibility, type Adv
 import { PartFormDialog } from "@/components/parts/PartFormDialog";
 import { PartFormWizard, type MarketplaceConfig, type NewCompatibility, type MarketplaceAccountSelection } from "@/components/parts/PartFormWizard";
 import type { PendingImage } from "@/components/parts/WizardImageUpload";
+import { ImageUploadProgressDialog } from "@/components/parts/ImageUploadProgressDialog";
 import { useUploadPartImage } from "@/hooks/usePartImages";
 import { useMercadoLivre } from "@/hooks/useMercadoLivre";
 import { DeletePartDialog } from "@/components/parts/DeletePartDialog";
@@ -74,6 +75,14 @@ const Pecas = () => {
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [partToDelete, setPartToDelete] = useState<Part | null>(null);
   const [isImportDialogOpen, setIsImportDialogOpen] = useState(false);
+  
+  // Image upload progress state
+  const [uploadProgress, setUploadProgress] = useState({
+    open: false,
+    currentIndex: 0,
+    totalImages: 0,
+    currentFileName: "",
+  });
 
   const { data: parts = [], isLoading } = useParts();
   const { data: categories = [] } = useCategories();
@@ -168,7 +177,21 @@ const Pecas = () => {
         
         // Upload pending images if any
         if (pendingImages.length > 0 && partId) {
-          for (const pendingImage of pendingImages) {
+          setUploadProgress({
+            open: true,
+            currentIndex: 0,
+            totalImages: pendingImages.length,
+            currentFileName: pendingImages[0]?.file.name || "",
+          });
+          
+          for (let i = 0; i < pendingImages.length; i++) {
+            const pendingImage = pendingImages[i];
+            setUploadProgress(prev => ({
+              ...prev,
+              currentIndex: i,
+              currentFileName: pendingImage.file.name,
+            }));
+            
             try {
               await uploadImageMutation.mutateAsync({ partId, file: pendingImage.file });
               // Clean up the preview URL
@@ -177,6 +200,22 @@ const Pecas = () => {
               console.error('Failed to upload image:', error);
             }
           }
+          
+          // Mark as complete briefly before closing
+          setUploadProgress(prev => ({
+            ...prev,
+            currentIndex: pendingImages.length,
+          }));
+          
+          // Close after a short delay to show completion
+          setTimeout(() => {
+            setUploadProgress({
+              open: false,
+              currentIndex: 0,
+              totalImages: 0,
+              currentFileName: "",
+            });
+          }, 1000);
         }
         
         // Save compatibilities if any
@@ -646,6 +685,14 @@ const Pecas = () => {
       <ImportPartsDialog
         open={isImportDialogOpen}
         onOpenChange={setIsImportDialogOpen}
+      />
+
+      {/* Image Upload Progress Dialog */}
+      <ImageUploadProgressDialog
+        open={uploadProgress.open}
+        currentIndex={uploadProgress.currentIndex}
+        totalImages={uploadProgress.totalImages}
+        currentFileName={uploadProgress.currentFileName}
       />
     </AppLayout>
   );
