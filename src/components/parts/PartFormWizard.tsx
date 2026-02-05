@@ -205,6 +205,7 @@
                isEditing={!!isEditing}
                isDuplicating={isDuplicating}
                part={part}
+               partId={part?.id}
              />
            )}
          </div>

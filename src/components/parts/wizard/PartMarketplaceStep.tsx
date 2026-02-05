@@ -16,11 +16,14 @@
    SelectValue,
  } from "@/components/ui/select";
  import { ChevronLeft, Loader2, Package, Scale, Ruler, Info } from "lucide-react";
+ import { Car, Calendar, AlertCircle } from "lucide-react";
  import type { ExtendedPartFormData, MarketplaceConfig } from "../PartFormWizard";
  import type { Part } from "@/hooks/useParts";
  import { useMercadoLivre } from "@/hooks/useMercadoLivre";
  import { Badge } from "@/components/ui/badge";
  import { Separator } from "@/components/ui/separator";
+ import { usePartCompatibilities } from "@/hooks/usePartCompatibilities";
+ import { Alert, AlertDescription } from "@/components/ui/alert";
  
  interface Category {
    id: string;
@@ -39,6 +42,7 @@
    isEditing: boolean;
    isDuplicating: boolean;
    part?: Part | null;
+   partId?: string;
  }
  
  // ML Category mapping based on internal categories
@@ -64,15 +68,29 @@
    onSubmit,
    isEditing,
    isDuplicating,
+   part,
+   partId,
  }: PartMarketplaceStepProps) {
    const { accounts: mlAccounts = [] } = useMercadoLivre();
    const activeMLAccount = mlAccounts?.find(acc => acc.status === 'active');
+ 
+   // Fetch existing compatibilities for the part
+   const { data: compatibilities = [] } = usePartCompatibilities(part?.id || partId);
  
    // Get category name for ML suggestion
    const categoryName = categories.find(c => c.id === formData.categoria_id)?.name || "";
    const suggestedMLCategory = ML_CATEGORY_SUGGESTIONS[categoryName] || "";
  
    const hasAnyMarketplaceSelected = marketplaces.mercadolivre || marketplaces.olx || marketplaces.shopee;
+ 
+   const formatYearRange = (inicio: number | null, fim: number | null) => {
+     if (inicio && fim) return `${inicio} - ${fim}`;
+     if (inicio) return `${inicio}+`;
+     if (fim) return `até ${fim}`;
+     return null;
+   };
+ 
+   const hasCompatibilities = compatibilities.length > 0;
  
    return (
      <>
@@ -281,6 +299,41 @@
                      <p className="font-medium font-mono">{formData.codigo_oem}</p>
                    </div>
                  )}
+                 
+                 {/* Compatibilities Section */}
+                 <Separator className="my-3" />
+                 <div className="space-y-2">
+                   <div className="flex items-center gap-2 text-sm">
+                     <Car className="w-4 h-4 text-muted-foreground" />
+                     <span className="text-muted-foreground">Compatibilidades ({compatibilities.length}):</span>
+                   </div>
+                   {hasCompatibilities ? (
+                     <div className="flex flex-wrap gap-2">
+                       {compatibilities.slice(0, 6).map((compat) => (
+                         <Badge key={compat.id} variant="secondary" className="text-xs">
+                           {compat.marca} {compat.modelo}
+                           {formatYearRange(compat.ano_inicio, compat.ano_fim) && (
+                             <span className="ml-1 opacity-70">
+                               ({formatYearRange(compat.ano_inicio, compat.ano_fim)})
+                             </span>
+                           )}
+                         </Badge>
+                       ))}
+                       {compatibilities.length > 6 && (
+                         <Badge variant="outline" className="text-xs">
+                           +{compatibilities.length - 6} mais
+                         </Badge>
+                       )}
+                     </div>
+                   ) : (
+                     <Alert variant="default" className="py-2">
+                       <AlertCircle className="h-4 w-4" />
+                       <AlertDescription className="text-xs">
+                         Nenhuma compatibilidade cadastrada. Adicione na página de detalhes da peça para melhorar a visibilidade do anúncio.
+                       </AlertDescription>
+                     </Alert>
+                   )}
+                 </div>
                </CardContent>
              </Card>
            </>
