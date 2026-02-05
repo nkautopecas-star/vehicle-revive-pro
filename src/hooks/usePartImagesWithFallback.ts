@@ -24,17 +24,41 @@ export function usePartImagesWithFallback(partId: string) {
         }));
       }
 
-      // Fallback: get image from linked marketplace listing
-      const { data: listings, error: listingError } = await supabase
+      // Fallback: get all images from linked marketplace listing via API
+      const { data: listing, error: listingError } = await supabase
         .from('marketplace_listings')
-        .select('image_url, external_id')
+        .select('id, image_url, external_id')
         .eq('part_id', partId)
-        .not('image_url', 'is', null)
-        .limit(1);
+        .not('external_id', 'is', null)
+        .limit(1)
+        .maybeSingle();
 
-      if (!listingError && listings && listings.length > 0 && listings[0].image_url) {
+      if (listingError || !listing) {
+        return [];
+      }
+
+      // If we have an external_id, try to fetch all pictures from ML API
+      if (listing.external_id) {
+        try {
+          const { data, error } = await supabase.functions.invoke('ml-item-pictures', {
+            body: { listingId: listing.id },
+          });
+
+          if (!error && data?.pictures && data.pictures.length > 0) {
+            return data.pictures.map((pic: { url: string }) => ({
+              url: pic.url,
+              source: 'listing' as const,
+            }));
+          }
+        } catch (e) {
+          console.error('Failed to fetch ML pictures:', e);
+        }
+      }
+
+      // Final fallback: use the cached image_url from the listing
+      if (listing.image_url) {
         return [{
-          url: listings[0].image_url,
+          url: listing.image_url,
           source: 'listing' as const,
         }];
       }
