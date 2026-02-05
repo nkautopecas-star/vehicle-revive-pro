@@ -2,6 +2,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import type { Database } from "@/integrations/supabase/types";
 import { useReactivateListings } from "./useReactivateListings";
+import { usePauseListings } from "./usePauseListings";
 
 type MovementType = Database["public"]["Enums"]["movement_type"];
 
@@ -44,6 +45,7 @@ export function usePartStockMovements(partId: string | undefined) {
 export function useCreateStockMovement() {
   const queryClient = useQueryClient();
   const reactivateListings = useReactivateListings();
+  const pauseListings = usePauseListings();
 
   return useMutation({
     mutationFn: async (input: CreateStockMovementInput) => {
@@ -103,9 +105,15 @@ export function useCreateStockMovement() {
       queryClient.invalidateQueries({ queryKey: ['parts'] });
       queryClient.invalidateQueries({ queryKey: ['stock-movements', result.partId] });
 
-      // If stock was zero and now has items, reactivate listings
+      // If stock reached zero, pause all listings for this part
+      if (result.previousQuantity > 0 && result.newQuantity === 0) {
+        console.log("Stock depleted to zero, attempting to pause all listings...");
+        pauseListings.mutate({ partId: result.partId });
+      }
+
+      // If stock was zero and now has items, reactivate all listings
       if (result.previousQuantity === 0 && result.newQuantity > 0) {
-        console.log("Stock restored from zero, attempting to reactivate listings...");
+        console.log("Stock restored from zero, attempting to reactivate all listings...");
         reactivateListings.mutate({ partId: result.partId });
       }
     },
