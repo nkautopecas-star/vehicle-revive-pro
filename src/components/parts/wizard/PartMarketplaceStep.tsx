@@ -106,6 +106,14 @@
      setNewCompatibilities([...newCompatibilities, newEntry]);
    };
  
+  const handleAddMultipleCompatibilities = (compats: Omit<CompatibilityEntry, "id">[]) => {
+    const newEntries: CompatibilityEntry[] = compats.map((compat, index) => ({
+      ...compat,
+      id: `new-${Date.now()}-${index}-${Math.random().toString(36).substr(2, 9)}`,
+    }));
+    setNewCompatibilities([...newCompatibilities, ...newEntries]);
+  };
+
    const handleRemoveCompatibility = (id: string) => {
      setNewCompatibilities(newCompatibilities.filter(c => c.id !== id));
    };
@@ -299,6 +307,7 @@
          <CompatibilityInlineForm
            compatibilities={newCompatibilities}
            onAdd={handleAddCompatibility}
+            onAddMultiple={handleAddMultipleCompatibilities}
            onRemove={handleRemoveCompatibility}
            partName={formData.nome}
            vehicleInfo={part?.veiculo_info}

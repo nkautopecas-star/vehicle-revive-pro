@@ -27,6 +27,7 @@
  interface CompatibilityInlineFormProps {
    compatibilities: CompatibilityEntry[];
    onAdd: (compat: Omit<CompatibilityEntry, "id">) => void;
+  onAddMultiple?: (compats: Omit<CompatibilityEntry, "id">[]) => void;
    onRemove: (id: string) => void;
    partName?: string;
    vehicleInfo?: string;
@@ -36,6 +37,7 @@
  export function CompatibilityInlineForm({
    compatibilities,
    onAdd,
+  onAddMultiple,
    onRemove,
    partName,
    vehicleInfo,
@@ -133,14 +135,20 @@
    };
  
    const handleAcceptAllSuggestions = () => {
-     suggestions.forEach(suggestion => {
-       onAdd({
+    const allCompats = suggestions.map(suggestion => ({
          marca: suggestion.marca,
          modelo: suggestion.modelo,
          ano_inicio: suggestion.ano_inicio || null,
          ano_fim: suggestion.ano_fim || null,
-       });
-     });
+    }));
+    
+    if (onAddMultiple) {
+      onAddMultiple(allCompats);
+    } else {
+      // Fallback to individual adds
+      allCompats.forEach(compat => onAdd(compat));
+    }
+    
      setSuggestions([]);
      setShowSuggestions(false);
      toast.success("Todas as sugestões foram adicionadas!");
