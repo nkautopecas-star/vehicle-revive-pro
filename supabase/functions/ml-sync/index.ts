@@ -140,35 +140,91 @@ serve(async (req) => {
       const mlUser = await mlApiCall('/users/me', accessToken);
       const siteId = mlUser.site_id || 'MLB'; // Default to Brazil
 
+      // Build attributes - required by ML API
+      // ITEM_CONDITION is always required
+      const attributes: Array<{ id: string; value_id?: string; value_name?: string }> = [
+        {
+          id: 'ITEM_CONDITION',
+          value_id: part.condicao === 'nova' ? '2230284' : '2230581', // 2230284 = New, 2230581 = Used
+        },
+      ];
+
+      // Add BRAND if available from compatibilities
+      if (part.part_compatibilities?.length > 0) {
+        const marca = part.part_compatibilities[0].marca;
+        if (marca) {
+          attributes.push({
+            id: 'BRAND',
+            value_name: marca,
+          });
+        }
+      } else if (part.vehicles?.marca) {
+        attributes.push({
+          id: 'BRAND',
+          value_name: part.vehicles.marca,
+        });
+      }
+
+      // Add OEM_CODE if available
+      if (part.codigo_oem) {
+        attributes.push({
+          id: 'ALPHANUMERIC_OEM',
+          value_name: part.codigo_oem,
+        });
+      }
+
+      // Add package dimensions as attributes (required by ML)
+      if (part.peso_gramas) {
+        attributes.push({ id: 'SELLER_PACKAGE_WEIGHT', value_name: `${part.peso_gramas} g` });
+      }
+      if (part.altura_cm) {
+        attributes.push({ id: 'SELLER_PACKAGE_HEIGHT', value_name: `${part.altura_cm} cm` });
+      }
+      if (part.largura_cm) {
+        attributes.push({ id: 'SELLER_PACKAGE_WIDTH', value_name: `${part.largura_cm} cm` });
+      }
+      if (part.comprimento_cm) {
+        attributes.push({ id: 'SELLER_PACKAGE_LENGTH', value_name: `${part.comprimento_cm} cm` });
+      }
+
       // Create ML listing data
       const mlListing = {
-        title,
         family_name: familyName,
-        category_id: listing_data?.category_id || 'MLB1747', // Default: Autopeças
+        category_id: listing_data?.category_id || 'MLB439572', // Default: Bombas de Combustível
         price: part.preco_venda || 100,
         currency_id: 'BRL',
         available_quantity: part.quantidade,
         buying_mode: 'buy_it_now',
-        condition: part.condicao === 'nova' ? 'new' : 'used',
-        listing_type_id: 'gold_special', // Premium listing
+        listing_type_id: (part.part_images?.length > 0) ? 'gold_special' : 'free', // Free if no images
         description: { plain_text: description },
+        attributes,
         pictures: part.part_images
           ?.sort((a: any, b: any) => (a.order_position || 0) - (b.order_position || 0))
           ?.slice(0, 10) // ML max 10 images
           ?.map((img: any) => ({
             source: `${SUPABASE_URL}/storage/v1/object/public/part-images/${img.file_path}`,
           })) || [],
-        // Add shipping info if dimensions are available
-        ...(part.peso_gramas && part.comprimento_cm && part.largura_cm && part.altura_cm ? {
-          shipping: {
-            mode: 'me2',
-            local_pick_up: false,
-            free_shipping: false,
-            dimensions: `${part.comprimento_cm}x${part.largura_cm}x${part.altura_cm},${part.peso_gramas}`,
-          },
-        } : {}),
-        ...listing_data,
+        // Spread listing_data first, then override with our computed values
+        ...(listing_data || {}),
       };
+
+      // Override category_id if not a valid leaf category (MLB1747 is parent category)
+      if (!mlListing.category_id || mlListing.category_id === 'MLB1747') {
+        mlListing.category_id = 'MLB439572'; // Bombas de Combustível - leaf category
+      }
+
+      // Override shipping with correct string format
+      if (part.peso_gramas && part.comprimento_cm && part.largura_cm && part.altura_cm) {
+        mlListing.shipping = {
+          mode: 'me2',
+          local_pick_up: false,
+          free_shipping: false,
+          dimensions: `${Math.round(part.altura_cm)}x${Math.round(part.largura_cm)}x${Math.round(part.comprimento_cm)},${Math.round(part.peso_gramas)}`,
+        };
+      } else {
+        // Remove invalid shipping if present
+        delete mlListing.shipping;
+      }
 
       console.log('Creating ML listing:', JSON.stringify(mlListing, null, 2));
 
