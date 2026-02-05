@@ -35,6 +35,8 @@ import type { ExtendedPartFormData } from "@/hooks/useParts";
 import { useAllPartCompatibilities, filterPartsByAdvancedCompatibility, type AdvancedCompatibilityFilter, useCreatePartCompatibility } from "@/hooks/usePartsWithCompatibilities";
 import { PartFormDialog } from "@/components/parts/PartFormDialog";
 import { PartFormWizard, type MarketplaceConfig, type NewCompatibility, type MarketplaceAccountSelection } from "@/components/parts/PartFormWizard";
+import type { PendingImage } from "@/components/parts/WizardImageUpload";
+import { useUploadPartImage } from "@/hooks/usePartImages";
 import { useMercadoLivre } from "@/hooks/useMercadoLivre";
 import { DeletePartDialog } from "@/components/parts/DeletePartDialog";
 import { PartThumbnail } from "@/components/parts/PartThumbnail";
@@ -81,6 +83,7 @@ const Pecas = () => {
   const deleteMutation = useDeletePart();
   const createCompatibilityMutation = useCreatePartCompatibility();
   const { createListing, isCreatingListing, accounts: mlAccounts = [] } = useMercadoLivre();
+  const uploadImageMutation = useUploadPartImage();
   const { toast } = useToast();
   
   // Fetch ML status for all parts
@@ -158,80 +161,94 @@ const Pecas = () => {
   const valorEstoque = filteredParts.reduce((acc, p) => acc + (p.preco_venda || 0) * p.quantidade, 0);
   const uniqueCategories = [...new Set(parts.map((p) => p.categoria_nome).filter(Boolean))];
 
-    const handleCreatePart = async (data: ExtendedPartFormData, marketplaces: MarketplaceConfig, newCompatibilities: NewCompatibility[], accountSelection: MarketplaceAccountSelection) => {
-      createMutation.mutate(data, {
-        onSuccess: async (partId) => {
+  const handleCreatePart = async (data: ExtendedPartFormData, marketplaces: MarketplaceConfig, newCompatibilities: NewCompatibility[], accountSelection: MarketplaceAccountSelection, pendingImages: PendingImage[]) => {
+    createMutation.mutate(data, {
+      onSuccess: async (partId) => {
         setIsFormDialogOpen(false);
-          // Save compatibilities if any
-          if (newCompatibilities.length > 0 && partId) {
-            for (const compat of newCompatibilities) {
-              await createCompatibilityMutation.mutateAsync({
-                part_id: partId,
-                marca: compat.marca,
-                modelo: compat.modelo,
-                ano_inicio: compat.ano_inicio,
-                ano_fim: compat.ano_fim,
-              });
+        
+        // Upload pending images if any
+        if (pendingImages.length > 0 && partId) {
+          for (const pendingImage of pendingImages) {
+            try {
+              await uploadImageMutation.mutateAsync({ partId, file: pendingImage.file });
+              // Clean up the preview URL
+              URL.revokeObjectURL(pendingImage.previewUrl);
+            } catch (error) {
+              console.error('Failed to upload image:', error);
             }
           }
+        }
+        
+        // Save compatibilities if any
+        if (newCompatibilities.length > 0 && partId) {
+          for (const compat of newCompatibilities) {
+            await createCompatibilityMutation.mutateAsync({
+              part_id: partId,
+              marca: compat.marca,
+              modelo: compat.modelo,
+              ano_inicio: compat.ano_inicio,
+              ano_fim: compat.ano_fim,
+            });
+          }
+        }
+        
+        // Create ML listing if marketplace selected
+        if (marketplaces.mercadolivre && partId) {
+          const activeAccounts = mlAccounts.filter(acc => acc.status === 'active');
+          const accountId = accountSelection.mercadolivre_account_id || 
+            (activeAccounts.length === 1 ? activeAccounts[0].id : undefined);
           
-          // Create ML listing if marketplace selected
-          if (marketplaces.mercadolivre && partId) {
-            const activeAccounts = mlAccounts.filter(acc => acc.status === 'active');
-            const accountId = accountSelection.mercadolivre_account_id || 
-              (activeAccounts.length === 1 ? activeAccounts[0].id : undefined);
-            
-            if (accountId) {
-              try {
-                const result = await createListing({ 
-                  accountId, 
-                  partId,
-                  listingData: {
-                    // Pass selected category
-                    category_id: accountSelection.mercadolivre_category_id || 'MLB1747',
-                    // Pass shipping dimensions
-                    shipping: data.peso_gramas && data.comprimento_cm && data.largura_cm && data.altura_cm ? {
-                      dimensions: {
-                        height: data.altura_cm,
-                        width: data.largura_cm,
-                        length: data.comprimento_cm,
-                      },
-                      weight: data.peso_gramas,
-                    } : undefined,
-                  }
-                });
-                
-                if (result?.permalink) {
-                  toast({
-                    title: "Anúncio publicado no Mercado Livre!",
-                    description: (
-                      <div className="flex flex-col gap-2">
-                        <span>ID: {result.ml_id}</span>
-                        <a 
-                          href={result.permalink} 
-                          target="_blank" 
-                          rel="noopener noreferrer"
-                          className="inline-flex items-center gap-1 text-primary hover:underline font-medium"
-                        >
-                          <ExternalLink className="w-3 h-3" />
-                          Ver anúncio no Mercado Livre
-                        </a>
-                      </div>
-                    ),
-                    duration: 10000, // 10 seconds to give time to click
-                  });
-                } else {
-                  toast({
-                    title: "Anúncio criado!",
-                    description: "O anúncio foi publicado no Mercado Livre",
-                  });
+          if (accountId) {
+            try {
+              const result = await createListing({ 
+                accountId, 
+                partId,
+                listingData: {
+                  // Pass selected category
+                  category_id: accountSelection.mercadolivre_category_id || 'MLB1747',
+                  // Pass shipping dimensions
+                  shipping: data.peso_gramas && data.comprimento_cm && data.largura_cm && data.altura_cm ? {
+                    dimensions: {
+                      height: data.altura_cm,
+                      width: data.largura_cm,
+                      length: data.comprimento_cm,
+                    },
+                    weight: data.peso_gramas,
+                  } : undefined,
                 }
-              } catch (error) {
-                // Error toast is already shown by useMercadoLivre hook
-                console.error('Failed to create ML listing:', error);
+              });
+              
+              if (result?.permalink) {
+                toast({
+                  title: "Anúncio publicado no Mercado Livre!",
+                  description: (
+                    <div className="flex flex-col gap-2">
+                      <span>ID: {result.ml_id}</span>
+                      <a 
+                        href={result.permalink} 
+                        target="_blank" 
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1 text-primary hover:underline font-medium"
+                      >
+                        <ExternalLink className="w-3 h-3" />
+                        Ver anúncio no Mercado Livre
+                      </a>
+                    </div>
+                  ),
+                  duration: 10000, // 10 seconds to give time to click
+                });
+              } else {
+                toast({
+                  title: "Anúncio criado!",
+                  description: "O anúncio foi publicado no Mercado Livre",
+                });
               }
+            } catch (error) {
+              // Error toast is already shown by useMercadoLivre hook
+              console.error('Failed to create ML listing:', error);
             }
           }
+        }
       },
     });
   };
@@ -255,24 +272,24 @@ const Pecas = () => {
     setIsFormDialogOpen(true);
   };
 
-    const handleUpdatePart = async (data: ExtendedPartFormData, marketplaces: MarketplaceConfig, newCompatibilities: NewCompatibility[], accountSelection: MarketplaceAccountSelection) => {
+  const handleUpdatePart = async (data: ExtendedPartFormData, marketplaces: MarketplaceConfig, newCompatibilities: NewCompatibility[], accountSelection: MarketplaceAccountSelection, _pendingImages: PendingImage[]) => {
     if (!editingPart) return;
     updateMutation.mutate({ id: editingPart.id, data }, {
-       onSuccess: async () => {
+      onSuccess: async () => {
         setIsFormDialogOpen(false);
         setEditingPart(null);
-         // Save new compatibilities if any
-         if (newCompatibilities.length > 0) {
-           for (const compat of newCompatibilities) {
-             await createCompatibilityMutation.mutateAsync({
-               part_id: editingPart.id,
-               marca: compat.marca,
-               modelo: compat.modelo,
-               ano_inicio: compat.ano_inicio,
-               ano_fim: compat.ano_fim,
-             });
-           }
-         }
+        // Save new compatibilities if any
+        if (newCompatibilities.length > 0) {
+          for (const compat of newCompatibilities) {
+            await createCompatibilityMutation.mutateAsync({
+              part_id: editingPart.id,
+              marca: compat.marca,
+              modelo: compat.modelo,
+              ano_inicio: compat.ano_inicio,
+              ano_fim: compat.ano_fim,
+            });
+          }
+        }
       },
     });
   };

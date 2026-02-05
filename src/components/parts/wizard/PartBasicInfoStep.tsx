@@ -1,24 +1,25 @@
- import { Button } from "@/components/ui/button";
- import { Input } from "@/components/ui/input";
- import { Label } from "@/components/ui/label";
- import { Textarea } from "@/components/ui/textarea";
- import {
-   DialogHeader,
-   DialogTitle,
-   DialogDescription,
- } from "@/components/ui/dialog";
- import {
-   Select,
-   SelectContent,
-   SelectItem,
-   SelectTrigger,
-   SelectValue,
- } from "@/components/ui/select";
- import { ChevronRight } from "lucide-react";
- import type { ExtendedPartFormData } from "../PartFormWizard";
- import type { Part } from "@/hooks/useParts";
- import { PartImageUpload } from "../PartImageUpload";
- import { PartCompatibilities } from "../PartCompatibilities";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import {
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from "@/components/ui/dialog";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { ChevronRight } from "lucide-react";
+import type { ExtendedPartFormData } from "../PartFormWizard";
+import type { Part } from "@/hooks/useParts";
+import { PartImageUpload } from "../PartImageUpload";
+import { PartCompatibilities } from "../PartCompatibilities";
+import { WizardImageUpload, type PendingImage } from "../WizardImageUpload";
  
  interface Category {
    id: string;
@@ -30,31 +31,35 @@
    label: string;
  }
  
- interface PartBasicInfoStepProps {
-   formData: ExtendedPartFormData;
-   setFormData: (data: ExtendedPartFormData) => void;
-   categories: Category[];
-   vehicles: Vehicle[];
-   isEditing: boolean;
-   isDuplicating: boolean;
-   isLoading?: boolean;
-   onNext: () => void;
-   onCancel: () => void;
-   part?: Part | null;
- }
+interface PartBasicInfoStepProps {
+  formData: ExtendedPartFormData;
+  setFormData: (data: ExtendedPartFormData) => void;
+  categories: Category[];
+  vehicles: Vehicle[];
+  isEditing: boolean;
+  isDuplicating: boolean;
+  isLoading?: boolean;
+  onNext: () => void;
+  onCancel: () => void;
+  part?: Part | null;
+  pendingImages: PendingImage[];
+  onPendingImagesChange: (images: PendingImage[]) => void;
+}
  
- export function PartBasicInfoStep({
-   formData,
-   setFormData,
-   categories,
-   vehicles,
-   isEditing,
-   isDuplicating,
-   isLoading,
-   onNext,
-   onCancel,
-   part,
- }: PartBasicInfoStepProps) {
+export function PartBasicInfoStep({
+  formData,
+  setFormData,
+  categories,
+  vehicles,
+  isEditing,
+  isDuplicating,
+  isLoading,
+  onNext,
+  onCancel,
+  part,
+  pendingImages,
+  onPendingImagesChange,
+}: PartBasicInfoStepProps) {
    const dialogTitle = isDuplicating
      ? "Duplicar Peça"
      : isEditing
@@ -273,18 +278,26 @@
            />
          </div>
  
-         {/* Image Upload Section - only for existing parts */}
-         {isEditing && <PartImageUpload partId={part?.id} disabled={isLoading} />}
- 
-         {/* Compatibilities Section - only for existing parts */}
-         {isEditing && (
-           <PartCompatibilities
-             partId={part?.id}
-             partName={formData.nome || part?.nome}
-             vehicleInfo={part?.veiculo_info}
-             disabled={isLoading}
-           />
-         )}
+        {/* Image Upload Section */}
+        {isEditing ? (
+          <PartImageUpload partId={part?.id} disabled={isLoading} />
+        ) : (
+          <WizardImageUpload
+            pendingImages={pendingImages}
+            onImagesChange={onPendingImagesChange}
+            disabled={isLoading}
+          />
+        )}
+
+        {/* Compatibilities Section - only for existing parts */}
+        {isEditing && (
+          <PartCompatibilities
+            partId={part?.id}
+            partName={formData.nome || part?.nome}
+            vehicleInfo={part?.veiculo_info}
+            disabled={isLoading}
+          />
+        )}
  
          <div className="flex justify-end gap-3 mt-4">
            <Button
