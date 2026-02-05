@@ -1,5 +1,6 @@
-import { useQuery } from "@tanstack/react-query";
+ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+ import { toast } from "sonner";
 
 export interface PartWithCompatibility {
   partId: string;
@@ -82,6 +83,46 @@ export function filterPartsByCompatibility(
 
   return matchingPartIds;
 }
+ 
+ export interface CreateCompatibilityData {
+   part_id: string;
+   marca: string;
+   modelo: string;
+   ano_inicio: number | null;
+   ano_fim: number | null;
+   observacoes?: string;
+ }
+ 
+ export function useCreatePartCompatibility() {
+   const queryClient = useQueryClient();
+ 
+   return useMutation({
+     mutationFn: async (data: CreateCompatibilityData) => {
+       const { error } = await supabase
+         .from('part_compatibilities')
+         .insert({
+           part_id: data.part_id,
+           marca: data.marca,
+           modelo: data.modelo,
+           ano_inicio: data.ano_inicio,
+           ano_fim: data.ano_fim,
+           observacoes: data.observacoes || null,
+         });
+ 
+       if (error) {
+         throw error;
+       }
+     },
+     onSuccess: () => {
+       queryClient.invalidateQueries({ queryKey: ['part-compatibilities'] });
+       queryClient.invalidateQueries({ queryKey: ['all-part-compatibilities'] });
+     },
+     onError: (error) => {
+       console.error('Error creating compatibility:', error);
+       toast.error('Erro ao adicionar compatibilidade.');
+     },
+   });
+ }
 
 export function filterPartsByAdvancedCompatibility(
   partIds: string[],
