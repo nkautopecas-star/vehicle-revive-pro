@@ -218,12 +218,15 @@ serve(async (req) => {
         );
       }
 
-      let title = part.nome;
-      if (part.vehicles) {
-        title = `${part.nome} ${part.vehicles.marca} ${part.vehicles.modelo} ${part.vehicles.ano}`;
-      } else if (part.part_compatibilities?.length > 0) {
-        const compat = part.part_compatibilities[0];
-        title = `${part.nome} ${compat.marca} ${compat.modelo}`;
+      // Use custom title from listing_data, or auto-generate
+      let title = listing_data?.title || part.nome;
+      if (!listing_data?.title) {
+        if (part.vehicles) {
+          title = `${part.nome} ${part.vehicles.marca} ${part.vehicles.modelo} ${part.vehicles.ano}`;
+        } else if (part.part_compatibilities?.length > 0) {
+          const compat = part.part_compatibilities[0];
+          title = `${part.nome} ${compat.marca} ${compat.modelo}`;
+        }
       }
       title = title.substring(0, 60);
 
@@ -233,20 +236,26 @@ serve(async (req) => {
       }
       familyName = familyName.substring(0, 120);
 
-      let description = `${part.nome}\n\n`;
-      if (part.codigo_oem) description += `Código OEM: ${part.codigo_oem}\n`;
-      if (part.codigo_interno) description += `Código Interno: ${part.codigo_interno}\n`;
-      description += `Condição: ${part.condicao}\n`;
-      if (part.observacoes) description += `\nObservações: ${part.observacoes}\n`;
+      // Use custom description from listing_data, or auto-generate
+      let description = '';
+      if (listing_data?.description) {
+        description = listing_data.description;
+      } else {
+        description = `${part.nome}\n\n`;
+        if (part.codigo_oem) description += `Código OEM: ${part.codigo_oem}\n`;
+        if (part.codigo_interno) description += `Código Interno: ${part.codigo_interno}\n`;
+        description += `Condição: ${part.condicao}\n`;
+        if (part.observacoes) description += `\nObservações: ${part.observacoes}\n`;
 
-      if (part.part_compatibilities?.length > 0) {
-        description += '\n--- Compatibilidade ---\n';
-        for (const compat of part.part_compatibilities) {
-          description += `${compat.marca} ${compat.modelo}`;
-          if (compat.ano_inicio && compat.ano_fim) {
-            description += ` (${compat.ano_inicio}-${compat.ano_fim})`;
+        if (part.part_compatibilities?.length > 0) {
+          description += '\n--- Compatibilidade ---\n';
+          for (const compat of part.part_compatibilities) {
+            description += `${compat.marca} ${compat.modelo}`;
+            if (compat.ano_inicio && compat.ano_fim) {
+              description += ` (${compat.ano_inicio}-${compat.ano_fim})`;
+            }
+            description += '\n';
           }
-          description += '\n';
         }
       }
 
@@ -344,9 +353,10 @@ serve(async (req) => {
           marketplace_account_id: account_id,
           external_id: mlResponse.id,
           titulo: title,
-          preco: part.preco_venda || 100,
+          preco: listing_data?.price || part.preco_venda || 100,
           status: 'active',
           last_sync: new Date().toISOString(),
+          listing_type: listing_data?.listing_type_id || listingTypeId,
         })
         .select()
         .single();

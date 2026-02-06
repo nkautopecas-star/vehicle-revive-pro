@@ -130,7 +130,9 @@ const PecaDetalhes = () => {
             <PublishToMLButton 
               partId={part.id} 
               partName={part.nome} 
-              preco={part.preco_venda} 
+              preco={part.preco_venda}
+              codigoOem={part.codigo_oem}
+              vehicleInfo={part.veiculo_info}
             />
             <Button variant="outline" asChild>
               <Link to={`/pecas?duplicate=${part.id}`}>
