@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -17,9 +17,13 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
-import { ExternalLink, Loader2, ShoppingBag, AlertCircle, CheckCircle2, ImageOff } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { Label } from "@/components/ui/label";
+import { ExternalLink, Loader2, ShoppingBag, AlertCircle, CheckCircle2, ImageOff, Sparkles, Pencil } from "lucide-react";
 import { useMercadoLivre } from "@/hooks/useMercadoLivre";
 import { usePartImages } from "@/hooks/usePartImages";
+import { useSuggestPartInfo } from "@/hooks/useSuggestPartInfo";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
@@ -31,19 +35,32 @@ interface PublishToMLButtonProps {
   partId: string;
   partName: string;
   preco: number | null;
+  codigoOem?: string | null;
+  vehicleInfo?: string | null;
 }
 
-export function PublishToMLButton({ partId, partName, preco }: PublishToMLButtonProps) {
+export function PublishToMLButton({ partId, partName, preco, codigoOem, vehicleInfo }: PublishToMLButtonProps) {
   const [open, setOpen] = useState(false);
   const [selectedAccountId, setSelectedAccountId] = useState<string>("");
   const [selectedListingTypes, setSelectedListingTypes] = useState<string[]>([]);
   const [publishingProgress, setPublishingProgress] = useState<{ current: number; total: number } | null>(null);
+  const [title, setTitle] = useState(partName);
+  const [description, setDescription] = useState("");
   const { toast } = useToast();
   
   const { accounts, isLoadingAccounts, createListing, isCreatingListing } = useMercadoLivre();
   const { data: images = [], isLoading: isLoadingImages } = usePartImages(partId);
   const { data: listingTypeRules } = useEnabledListingTypes('mercadolivre');
+  const { isLoading: isSuggestingAI, suggestFromOEM } = useSuggestPartInfo();
   
+  // Reset fields when dialog opens
+  useEffect(() => {
+    if (open) {
+      setTitle(partName);
+      setDescription("");
+    }
+  }, [open, partName]);
+
   // Check if part is already published
   const { data: existingListings, isLoading: isLoadingListings } = useQuery({
     queryKey: ['part-ml-listings', partId],
@@ -71,8 +88,33 @@ export function PublishToMLButton({ partId, partName, preco }: PublishToMLButton
   const hasPrice = preco !== null && preco > 0;
   
   const hasSelectedTypes = selectedListingTypes.length > 0;
-  const canPublish = hasImages && hasActiveAccounts && hasPrice && hasSelectedTypes;
+  const canPublish = hasImages && hasActiveAccounts && hasPrice && hasSelectedTypes && title.trim().length > 0;
   
+  const handleSuggestTitle = async () => {
+    if (!codigoOem) {
+      toast({
+        title: "Código OEM necessário",
+        description: "Cadastre o código OEM da peça para obter sugestões da IA",
+        variant: "destructive",
+      });
+      return;
+    }
+    
+    const suggestion = await suggestFromOEM(codigoOem, vehicleInfo || undefined);
+    if (suggestion) {
+      if (suggestion.tituloML) {
+        setTitle(suggestion.tituloML);
+      }
+      if (suggestion.descricao) {
+        setDescription(prev => prev || suggestion.descricao || "");
+      }
+      toast({
+        title: "Sugestão aplicada",
+        description: `Título sugerido pela IA com confiança ${suggestion.confianca}`,
+      });
+    }
+  };
+
   const handlePublish = async () => {
     if (!selectedAccountId) {
       toast({
@@ -97,7 +139,6 @@ export function PublishToMLButton({ partId, partName, preco }: PublishToMLButton
     
     setPublishingProgress({ current: 0, total: selectedListingTypes.length });
     
-    // Create listings for each selected type
     for (let i = 0; i < selectedListingTypes.length; i++) {
       const listingType = selectedListingTypes[i];
       const rule = listingTypeRules?.find(r => r.listing_type === listingType);
@@ -114,6 +155,8 @@ export function PublishToMLButton({ partId, partName, preco }: PublishToMLButton
           listingData: {
             listing_type_id: listingType,
             price: calculatedPrice,
+            title: title.trim(),
+            description: description.trim() || undefined,
           },
         });
         
@@ -133,7 +176,6 @@ export function PublishToMLButton({ partId, partName, preco }: PublishToMLButton
     
     setPublishingProgress(null);
     
-    // Show summary toast
     if (successfulListings.length > 0) {
       toast({
         title: `${successfulListings.length} anúncio(s) criado(s)!`,
@@ -173,7 +215,6 @@ export function PublishToMLButton({ partId, partName, preco }: PublishToMLButton
     }
   };
   
-  // If part has no images, show disabled button with tooltip-like message
   if (!hasImages && !isLoadingImages) {
     return (
       <Button variant="outline" disabled className="gap-2">
@@ -191,7 +232,7 @@ export function PublishToMLButton({ partId, partName, preco }: PublishToMLButton
           Publicar no ML
         </Button>
       </DialogTrigger>
-      <DialogContent className="sm:max-w-md">
+      <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <ShoppingBag className="w-5 h-5" />
@@ -216,6 +257,7 @@ export function PublishToMLButton({ partId, partName, preco }: PublishToMLButton
             )}
             <div className="flex items-center gap-2 mt-2 text-xs text-muted-foreground">
               <span>{images.length} foto(s)</span>
+              {codigoOem && <span>• OEM: {codigoOem}</span>}
             </div>
           </div>
           
@@ -253,6 +295,58 @@ export function PublishToMLButton({ partId, partName, preco }: PublishToMLButton
             </div>
           )}
           
+          {/* Title field */}
+          <div className="space-y-2">
+            <Label htmlFor="ml-title" className="flex items-center gap-2">
+              <Pencil className="w-3.5 h-3.5" />
+              Título do anúncio
+            </Label>
+            <div className="flex gap-2">
+              <Input
+                id="ml-title"
+                value={title}
+                onChange={(e) => setTitle(e.target.value.substring(0, 60))}
+                placeholder="Título do anúncio no Mercado Livre"
+                maxLength={60}
+              />
+              {codigoOem && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="icon"
+                  onClick={handleSuggestTitle}
+                  disabled={isSuggestingAI}
+                  title="Sugerir título com IA (via OEM)"
+                >
+                  {isSuggestingAI ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <Sparkles className="w-4 h-4" />
+                  )}
+                </Button>
+              )}
+            </div>
+            <p className="text-xs text-muted-foreground">
+              {title.length}/60 caracteres
+              {!codigoOem && " • Cadastre o OEM para usar sugestão da IA"}
+            </p>
+          </div>
+
+          {/* Description field */}
+          <div className="space-y-2">
+            <Label htmlFor="ml-description">Descrição do anúncio</Label>
+            <Textarea
+              id="ml-description"
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              placeholder="Descrição detalhada da peça para o anúncio. Se vazio, será gerada automaticamente com os dados da peça."
+              rows={4}
+            />
+            <p className="text-xs text-muted-foreground">
+              Opcional — se vazio, será gerada automaticamente com OEM, condição e compatibilidades.
+            </p>
+          </div>
+
           {/* Validation checks */}
           <div className="space-y-2">
             <div className={cn(
@@ -285,7 +379,7 @@ export function PublishToMLButton({ partId, partName, preco }: PublishToMLButton
           {/* Account selection */}
           {hasActiveAccounts && (
             <div className="space-y-2">
-              <label className="text-sm font-medium">Conta do Mercado Livre</label>
+              <Label>Conta do Mercado Livre</Label>
               <Select value={selectedAccountId} onValueChange={setSelectedAccountId}>
                 <SelectTrigger>
                   <SelectValue placeholder="Selecione uma conta" />
