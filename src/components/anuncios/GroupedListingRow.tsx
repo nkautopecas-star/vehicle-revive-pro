@@ -49,24 +49,21 @@ function getStatusBadge(status: string) {
   }
 }
 
-// Infer listing type from title or price patterns
-function getListingTypeLabel(listing: MarketplaceListing, allListings: MarketplaceListing[]): string {
-  // If there's only one listing, no need for type label
-  if (allListings.length <= 1) return "";
+// Map ML listing_type_id to display name
+function getListingTypeLabel(listing: MarketplaceListing): string {
+  const listingType = (listing as any).listing_type;
+  if (!listingType) return "";
   
-  // Find min and max prices
-  const prices = allListings.map(l => l.preco);
-  const minPrice = Math.min(...prices);
-  const maxPrice = Math.max(...prices);
+  const typeMap: Record<string, string> = {
+    'gold_special': 'Premium',
+    'gold_pro': 'Clássico',
+    'gold': 'Ouro',
+    'silver': 'Prata',
+    'bronze': 'Bronze',
+    'free': 'Grátis',
+  };
   
-  // If prices are the same, we can't distinguish
-  if (minPrice === maxPrice) return "";
-  
-  // Assume lower price = Clássico, higher price = Premium
-  if (listing.preco === minPrice) return "Clássico";
-  if (listing.preco === maxPrice) return "Premium";
-  
-  return "";
+  return typeMap[listingType] || listingType;
 }
 
 export function GroupedListingRow({
@@ -328,9 +325,9 @@ export function GroupedListingRow({
             <div className="flex flex-col pl-2">
               <div className="flex items-center gap-2">
                 <span className="text-sm">{listing.titulo}</span>
-                {getListingTypeLabel(listing, group.listings) && (
+                {getListingTypeLabel(listing) && (
                   <Badge variant="outline" className="text-xs">
-                    {getListingTypeLabel(listing, group.listings)}
+                    {getListingTypeLabel(listing)}
                   </Badge>
                 )}
               </div>

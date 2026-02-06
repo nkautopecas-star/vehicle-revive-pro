@@ -562,7 +562,7 @@ serve(async (req) => {
           const batch = ids.slice(i, i + 20);
           try {
             const itemsResp = await mlApiCall(
-              `/items?ids=${batch.join(',')}&attributes=id,title,price,status,date_created,thumbnail,pictures`,
+              `/items?ids=${batch.join(',')}&attributes=id,title,price,status,date_created,thumbnail,pictures,listing_type_id`,
               accessToken,
               {},
               retryContext
@@ -616,6 +616,7 @@ serve(async (req) => {
             part_id: string | null;
             last_sync: string;
             image_url: string | null;
+            listing_type: string | null;
           }> = [];
 
           for (const item of items) {
@@ -662,6 +663,7 @@ serve(async (req) => {
               part_id: partId,
               last_sync: new Date().toISOString(),
               image_url: imageUrl,
+              listing_type: item.listing_type_id || null,
             });
           }
 

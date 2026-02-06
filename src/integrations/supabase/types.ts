@@ -114,6 +114,7 @@ export type Database = {
           id: string
           image_url: string | null
           last_sync: string | null
+          listing_type: string | null
           marketplace_account_id: string
           part_id: string | null
           preco: number
@@ -127,6 +128,7 @@ export type Database = {
           id?: string
           image_url?: string | null
           last_sync?: string | null
+          listing_type?: string | null
           marketplace_account_id: string
           part_id?: string | null
           preco: number
@@ -140,6 +142,7 @@ export type Database = {
           id?: string
           image_url?: string | null
           last_sync?: string | null
+          listing_type?: string | null
           marketplace_account_id?: string
           part_id?: string | null
           preco?: number
